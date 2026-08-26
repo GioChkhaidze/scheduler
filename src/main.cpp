@@ -1,6 +1,8 @@
 // C++20
 #include "SystemConfig.hpp"
 #include "TaskTimeTable.hpp"
+#include "WorldState.hpp"
+#include "Protocol.hpp"
 #include <cassert>
 #include <sstream>
 #include <iostream>
@@ -8,13 +10,11 @@
 #include <vector>
 #include <variant>
 
-// enum class RequestState {
-//   Arrived,
-
-// }
-
-// Server edge;
-// std::vector < Server > cloud;
+// class Scheduler {
+//   SystemConfig config_;
+//   TimingCurves timing_curves_;
+//   WorldState world_;
+// };
 
 // class Scheduler {
 // public:
@@ -25,21 +25,6 @@
 // private:
 //   WorldState world_;
 // }
-
-// enum class TaskState {
-//   PPRE,
-//   Pup,
-//   PPROC,
-//   Pdown,
-//   PPOST,
-//   DPRE,
-//   Dup,
-//   DPROC,
-//   Ddown,
-//   DPOST,
-//   FIN
-// };
-
 
 /*
 read the 2 parameter lines, then N and the N warmup rows
@@ -60,7 +45,6 @@ int main() {
   TaskTimeTable table = readTaskTimeTable(std::cin);
   
 /*
-
 Build the six usable timing curves from TaskTimeTable.
 Define Frame, the four event types, servers, and all six task specifications.
 Implement and test readFrame() for ARR, TDN, XDN, FIN, END, and EOF.
@@ -68,10 +52,7 @@ Define request lifecycle and edge/cloud busy state.
 Implement legal task-generation functions.
 Connect everything into the interactive read-update-decide-print-flush loop.
 Replay the worked examples and test simultaneous events and degenerate cases.
-
 */
-
-
 
   // while (readFrame(std::cin)) {
   //   if (frame.end) break;

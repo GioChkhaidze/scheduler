@@ -15,6 +15,7 @@ add_library(scheduler_core
   src/SystemConfig.cpp
   src/TaskTimeTable.cpp
   src/Protocol.cpp
+  src/WorldState.cpp
 )
 
 target_include_directories(scheduler_core

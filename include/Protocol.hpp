@@ -19,10 +19,6 @@ struct ServerId {
   int cloud_index; // Ignored when type == Edge
 };
 
-struct ResourceState {
-  bool busy = false;
-};
-
 /*********************************/
 /************* TASKS *************/
 /*********************************/
@@ -57,6 +53,7 @@ struct DecodePostTask {
   std::vector<int> rids;
 };
 
+// TaskSpec: temporary work assigned to a computer
 using TaskSpec = std::variant<
   PrefillPreTask,
   PrefillProcTask,
@@ -108,6 +105,7 @@ struct FinishEvent {
   /* rid */ 
 };
 
+// Event: notification that something arrived or completed
 using Event = std::variant<
   ArrivalEvent,
   TaskDoneEvent,
@@ -123,6 +121,5 @@ struct Frame {
   double timestamp;
   std::vector < Event > events;
 };
-
 
 std::optional < Frame > readFrame(std::istream& input);
