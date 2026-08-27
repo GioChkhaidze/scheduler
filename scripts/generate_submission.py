@@ -12,6 +12,7 @@ PARTS = (
     'include/WorldState.hpp',
     'include/SingletonScheduler.hpp',
     'include/DecodeBatchScheduler.hpp',
+    'include/ScoreAwareScheduler.hpp',
     'include/Scheduler.hpp',
     'src/SchedulerCore.hpp',
     'src/Protocol.cpp',
@@ -20,6 +21,7 @@ PARTS = (
     'src/WorldState.cpp',
     'src/SingletonScheduler.cpp',
     'src/DecodeBatchScheduler.cpp',
+    'src/ScoreAwareScheduler.cpp',
     'src/main.cpp',
 )
 

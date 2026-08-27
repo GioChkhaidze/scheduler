@@ -455,6 +455,8 @@ void testDecodeProcDownloadsAndGroupedPost() {
   assert(world.requests.at(1).state == RequestState::ReadyDecodePre);
   assert(world.requests.at(0).tokens_produced == 1);
   assert(world.requests.at(1).tokens_produced == 4);
+  assert(world.requests.at(0).last_token_time == 8.0);
+  assert(world.requests.at(1).last_token_time == 8.0);
 }
 
 void testFinishWinsRegardlessOfFrameLineOrder() {
@@ -495,8 +497,10 @@ void testFinishWinsRegardlessOfFrameLineOrder() {
 
   assert(!world.edge.busy);
   assert(world.requests.at(0).tokens_produced == 3);
+  assert(world.requests.at(0).last_token_time == 9.0);
   assert(world.requests.at(0).state == RequestState::Finished);
   assert(world.requests.at(1).tokens_produced == 8);
+  assert(world.requests.at(1).last_token_time == 9.0);
   assert(world.requests.at(1).state == RequestState::ReadyDecodePre);
 }
 

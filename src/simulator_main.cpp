@@ -3,12 +3,14 @@
 
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <string>
 
 namespace {
 
 void printUsage(const char* program) {
-  std::cerr << "Usage: " << program << " [--policy singleton|batch] [--trace] < scenario.txt\n";
+  std::cerr << "Usage: " << program
+    << " [--policy singleton|batch|score] [--target-hot count] [--trace] < scenario.txt\n";
 }
 
 } // namespace
@@ -16,19 +18,26 @@ void printUsage(const char* program) {
 int main(int argc, char** argv) {
   std::string policy_name = "batch";
   bool record_frames = false;
+  std::optional<int> target_hot_set_size;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
     if (argument == "--policy" && i + 1 < argc) {
       policy_name = argv[++i];
     } else if (argument == "--trace") {
       record_frames = true;
+    } else if (argument == "--target-hot" && i + 1 < argc) {
+      target_hot_set_size = std::stoi(argv[++i]);
+      if (*target_hot_set_size < 1) {
+        printUsage(argv[0]);
+        return 2;
+      }
     } else {
       printUsage(argv[0]);
       return 2;
     }
   }
 
-  if (policy_name != "singleton" && policy_name != "batch") {
+  if (policy_name != "singleton" && policy_name != "batch" && policy_name != "score") {
     printUsage(argv[0]);
     return 2;
   }
@@ -38,11 +47,17 @@ int main(int argc, char** argv) {
   const TimingCurves curves = buildTimingCurves(table);
   const std::vector<SimulationRequest> workload = readSimulationWorkload(std::cin);
   const DecodeBatchPolicy batch_policy = buildDecodeBatchPolicy(curves, config.S);
+  const ScoreAwareSchedulerConfig score_config =
+    buildScoreAwareSchedulerConfig(config, curves, target_hot_set_size);
 
   const SimulationPolicy policy = [&](const WorldState& world) {
-    return policy_name == "singleton"
-      ? chooseSingletonAssignments(world, config.num_layers)
-      : chooseBatchedAssignments(world, config.num_layers, batch_policy);
+    if (policy_name == "singleton") {
+      return chooseSingletonAssignments(world, config.num_layers);
+    }
+    if (policy_name == "batch") {
+      return chooseBatchedAssignments(world, config.num_layers, batch_policy);
+    }
+    return chooseScoreAwareAssignments(world, config.num_layers, score_config);
   };
   const SimulationResult result = simulate(config, curves, workload, policy, {record_frames, 2'000'000});
 

@@ -41,16 +41,29 @@ std::vector<int> chooseDecodeRids(
   RequestState state,
   std::optional<int> remote,
   const DecodeSelector& selector) {
-  std::vector<int> rids = findRequests(world, state, remote, selector.inspectionLimit());
-  if (rids.empty()) {
-    return rids;
+  return selector.select(world, state, remote);
+}
+
+inline std::optional<Assignment> choosePrefillPostAssignment(const WorldState& world) {
+  const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPost);
+  if (!rid.has_value()) {
+    return std::nullopt;
   }
 
-  const int batch_size = selector.batchSize(state, rids.size());
-  assert(batch_size >= 1);
-  assert(static_cast<std::size_t>(batch_size) <= rids.size());
-  rids.resize(static_cast<std::size_t>(batch_size));
-  return rids;
+  const Request& request = world.requests.at(static_cast<std::size_t>(*rid));
+  assert(request.remote.has_value());
+  return Assignment{ServerId{ServerType::Edge, -1}, PrefillPostTask{*request.remote, *rid}};
+}
+
+template <typename DecodeSelector>
+std::optional<Assignment> chooseDecodePreAssignment(
+  const WorldState& world, const DecodeSelector& selector) {
+  std::vector<int> rids = chooseDecodeRids(
+    world, RequestState::ReadyDecodePre, std::nullopt, selector);
+  if (rids.empty()) {
+    return std::nullopt;
+  }
+  return Assignment{ServerId{ServerType::Edge, -1}, DecodePreTask{std::move(rids)}};
 }
 
 template <typename DecodeSelector>
@@ -64,15 +77,20 @@ std::optional<Assignment> chooseEdgeAssignment(const WorldState& world, const De
     return Assignment{ServerId{ServerType::Edge, -1}, DecodePostTask{std::move(rids)}};
   }
 
-  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPost)) {
-    const Request& request = world.requests.at(static_cast<std::size_t>(*rid));
-    assert(request.remote.has_value());
-    return Assignment{ServerId{ServerType::Edge, -1}, PrefillPostTask{*request.remote, *rid}};
-  }
-
-  if (std::vector<int> rids = chooseDecodeRids(
-        world, RequestState::ReadyDecodePre, std::nullopt, selector); !rids.empty()) {
-    return Assignment{ServerId{ServerType::Edge, -1}, DecodePreTask{std::move(rids)}};
+  if (selector.preferPrefillPostBeforeDecodePre(world)) {
+    if (const auto assignment = choosePrefillPostAssignment(world)) {
+      return assignment;
+    }
+    if (const auto assignment = chooseDecodePreAssignment(world, selector)) {
+      return assignment;
+    }
+  } else {
+    if (const auto assignment = chooseDecodePreAssignment(world, selector)) {
+      return assignment;
+    }
+    if (const auto assignment = choosePrefillPostAssignment(world)) {
+      return assignment;
+    }
   }
 
   if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPre)) {

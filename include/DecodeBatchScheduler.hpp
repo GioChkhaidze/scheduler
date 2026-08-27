@@ -3,6 +3,7 @@
 #include <TaskTimeTable.hpp>
 #include <WorldState.hpp>
 
+#include <cstddef>
 #include <vector>
 
 struct DecodeBatchPolicy {
@@ -12,5 +13,6 @@ struct DecodeBatchPolicy {
 };
 
 DecodeBatchPolicy buildDecodeBatchPolicy(const TimingCurves& curves, double assignment_cost, int max_batch_size = 4096);
+int selectDecodeBatchSize(const DecodeBatchPolicy& policy, RequestState state, std::size_t ready_count);
 std::vector<Assignment> chooseBatchedAssignments(
   const WorldState& world, int num_layers, const DecodeBatchPolicy& batch_policy);

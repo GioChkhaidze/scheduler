@@ -39,6 +39,7 @@ struct Request {
   std::optional<int> remote;
   int next_prefill_layer = 0;
   int tokens_produced = 0;
+  std::optional<double> last_token_time;
   
   RequestState state;
 };

@@ -58,6 +58,7 @@ void applyArrival(WorldState& world, const ArrivalEvent& arrival) {
     .remote = std::nullopt,
     .next_prefill_layer = 0,
     .tokens_produced = 0,
+    .last_token_time = std::nullopt,
     .state = RequestState::ReadyPrefillPre,
   });
 }
@@ -131,6 +132,7 @@ void applyTaskDone(WorldState& world, const TaskDoneEvent& event, int num_layers
         Request& request = getRequest(world, rid);
         assert(request.state == RequestState::WaitingDecodePostDone);
         ++request.tokens_produced;
+        request.last_token_time = world.current_time;
         request.state = RequestState::ReadyDecodePre;
       }
     },

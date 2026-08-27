@@ -44,9 +44,19 @@ void runPolicy(
 } // namespace
 
 int main(int argc, char** argv) {
-  if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " scenario.txt\n";
+  if (argc != 2 && argc != 4) {
+    std::cerr << "Usage: " << argv[0] << " scenario.txt [--target-hot count]\n";
     return 2;
+  }
+  std::optional<int> target_hot_set_size;
+  if (argc == 4) {
+    if (std::string(argv[2]) != "--target-hot") {
+      return 2;
+    }
+    target_hot_set_size = std::stoi(argv[3]);
+    if (*target_hot_set_size < 1) {
+      return 2;
+    }
   }
 
   std::ifstream input(argv[1]);
@@ -60,6 +70,8 @@ int main(int argc, char** argv) {
   const TimingCurves curves = buildTimingCurves(table);
   const std::vector<SimulationRequest> workload = readSimulationWorkload(input);
   const DecodeBatchPolicy batch_policy = buildDecodeBatchPolicy(curves, config.S);
+  const ScoreAwareSchedulerConfig score_config =
+    buildScoreAwareSchedulerConfig(config, curves, target_hot_set_size);
 
   std::cout << std::fixed << std::setprecision(9);
   std::cout << "policy,completed,frames,tp,mean_tdr,mean_tpot,dist,norm_tp,norm_c,score,wall_us\n";
@@ -69,5 +81,13 @@ int main(int argc, char** argv) {
   runPolicy("decode_batch", config, curves, workload, [&](const WorldState& world) {
     return chooseBatchedAssignments(world, config.num_layers, batch_policy);
   });
+  runPolicy(
+    "score_aware_target_" + std::to_string(score_config.target_hot_set_size),
+    config,
+    curves,
+    workload,
+    [&](const WorldState& world) {
+      return chooseScoreAwareAssignments(world, config.num_layers, score_config);
+    });
   return 0;
 }

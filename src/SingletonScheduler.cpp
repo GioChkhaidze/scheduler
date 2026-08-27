@@ -8,12 +8,13 @@ namespace {
 
 class SingletonDecodeSelector {
 public:
-  std::size_t inspectionLimit() const {
-    return 1;
+  std::vector<int> select(
+    const WorldState& world, RequestState state, std::optional<int> remote) const {
+    return scheduler_detail::findRequests(world, state, remote, 1);
   }
 
-  int batchSize(RequestState, std::size_t) const {
-    return 1;
+  bool preferPrefillPostBeforeDecodePre(const WorldState&) const {
+    return true;
   }
 };
 
