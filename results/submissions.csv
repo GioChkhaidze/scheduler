@@ -1,0 +1,2 @@
+version,rank,mean,total,verdict,submission_sha256,notes
+V1-singleton,3248,546.9317376910,12032.4982292019,22/22 OK,7975026c8e84b2bdc3c2c639b15036c1892ea18838fb70ba30fa59e37dab8c7b,One request per decode task

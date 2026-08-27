@@ -19,6 +19,22 @@ Request makeRequest(std::optional<int> remote, RequestState state, int next_pref
   };
 }
 
+TimingCurves makeUniformCurves(const TimingCurve& curve) {
+  return {
+    .prefill_pre = curve,
+    .prefill_proc = curve,
+    .prefill_post = curve,
+    .decode_pre = curve,
+    .decode_proc = curve,
+    .decode_post = curve,
+  };
+}
+
+DecodeBatchPolicy makeMaximalBatchPolicy(int max_batch_size = 8) {
+  const TimingCurve constant_curve{{{1, 0.0}, {max_batch_size, 0.0}}};
+  return buildDecodeBatchPolicy(makeUniformCurves(constant_curve), 10.0, max_batch_size);
+}
+
 template <typename Task>
 const Task& getTask(const std::vector<Assignment>& assignments, std::size_t index) {
   assert(index < assignments.size());
@@ -112,6 +128,78 @@ void testContinuesPrefillFromNextUnfinishedLayer() {
   assert(task.layer_end == 8);
 }
 
+void testPrecomputesLowestAmortizedCostForEveryReadyCount() {
+  const TimingCurve curve{{{1, 10.0}, {2, 12.0}, {3, 60.0}, {4, 14.0}}};
+  const DecodeBatchPolicy policy = buildDecodeBatchPolicy(makeUniformCurves(curve), 10.0, 4);
+
+  assert(policy.pre_by_ready_count == std::vector<int>({0, 1, 2, 2, 4}));
+  assert(policy.proc_by_ready_count == policy.pre_by_ready_count);
+  assert(policy.post_by_ready_count == policy.pre_by_ready_count);
+}
+
+void testBatchesDecodePreAcrossRemotesWithoutWaiting() {
+  WorldState world{2};
+  world.requests.push_back(makeRequest(0, RequestState::ReadyDecodePre));
+  world.requests.push_back(makeRequest(1, RequestState::ReadyDecodePre));
+
+  const DecodeBatchPolicy policy = makeMaximalBatchPolicy();
+  const std::vector<Assignment> assignments = chooseBatchedAssignments(world, 4, policy);
+
+  assert(assignments.size() == 1);
+  const DecodePreTask& task = getTask<DecodePreTask>(assignments, 0);
+  assert(task.rids == std::vector<int>({0, 1}));
+
+  startAssignment(world, assignments[0], 4);
+  assert(world.requests[0].state == RequestState::WaitingDecodePreDone);
+  assert(world.requests[1].state == RequestState::WaitingDecodePreDone);
+}
+
+void testBatchesDecodeProcIndependentlyPerRemote() {
+  WorldState world{2};
+  world.requests.push_back(makeRequest(0, RequestState::ReadyDecodeProc));
+  world.requests.push_back(makeRequest(1, RequestState::ReadyDecodeProc));
+  world.requests.push_back(makeRequest(0, RequestState::ReadyDecodeProc));
+  world.requests.push_back(makeRequest(0, RequestState::ReadyDecodeProc));
+
+  const DecodeBatchPolicy policy = makeMaximalBatchPolicy();
+  const std::vector<Assignment> assignments = chooseBatchedAssignments(world, 4, policy);
+
+  assert(assignments.size() == 2);
+  assert(assignments[0].server.type == ServerType::Cloud);
+  assert(assignments[0].server.cloud_index == 0);
+  assert(assignments[1].server.type == ServerType::Cloud);
+  assert(assignments[1].server.cloud_index == 1);
+  assert(getTask<DecodeProcTask>(assignments, 0).rids == std::vector<int>({0, 2, 3}));
+  assert(getTask<DecodeProcTask>(assignments, 1).rids == std::vector<int>({1}));
+}
+
+void testBatchesDecodePostAcrossRemotes() {
+  WorldState world{2};
+  world.requests.push_back(makeRequest(1, RequestState::ReadyDecodePost));
+  world.requests.push_back(makeRequest(0, RequestState::ReadyDecodePost));
+  world.requests.push_back(makeRequest(1, RequestState::ReadyDecodePost));
+
+  const DecodeBatchPolicy policy = makeMaximalBatchPolicy();
+  const std::vector<Assignment> assignments = chooseBatchedAssignments(world, 4, policy);
+
+  assert(assignments.size() == 1);
+  assert(getTask<DecodePostTask>(assignments, 0).rids == std::vector<int>({0, 1, 2}));
+}
+
+void testUsesSingletonWhenItHasLowestAmortizedCost() {
+  const TimingCurve expensive_batches{{{1, 1.0}, {2, 100.0}, {4, 400.0}}};
+  const DecodeBatchPolicy policy = buildDecodeBatchPolicy(makeUniformCurves(expensive_batches), 0.0, 4);
+  WorldState world{1};
+  world.requests.push_back(makeRequest(0, RequestState::ReadyDecodePre));
+  world.requests.push_back(makeRequest(0, RequestState::ReadyDecodePre));
+  world.requests.push_back(makeRequest(0, RequestState::ReadyDecodePre));
+
+  const std::vector<Assignment> assignments = chooseBatchedAssignments(world, 4, policy);
+
+  assert(assignments.size() == 1);
+  assert(getTask<DecodePreTask>(assignments, 0).rids == std::vector<int>({0}));
+}
+
 } // namespace
 
 int main() {
@@ -119,5 +207,10 @@ int main() {
   testPrefillPlacementIsDeterministic();
   testBusyResourcesAndNoReadyWorkProduceNoAssignments();
   testContinuesPrefillFromNextUnfinishedLayer();
+  testPrecomputesLowestAmortizedCostForEveryReadyCount();
+  testBatchesDecodePreAcrossRemotesWithoutWaiting();
+  testBatchesDecodeProcIndependentlyPerRemote();
+  testBatchesDecodePostAcrossRemotes();
+  testUsesSingletonWhenItHasLowestAmortizedCost();
   return 0;
 }
