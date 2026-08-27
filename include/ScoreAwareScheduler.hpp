@@ -21,6 +21,7 @@ struct ScoreAwareSchedulerConfig {
   double slo_tdr;
   double slo_tpot;
   double waiting_weight;
+  bool prefill_warmup;
 };
 
 RequestClass classifyRequest(const Request& request);

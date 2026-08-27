@@ -3,6 +3,7 @@
 #include <vector>
 #include <cassert>
 #include <algorithm>
+#include <iterator>
 
 // Preconditions:
 // - curve.points is nonempty
@@ -13,25 +14,24 @@ double interpolate(const TimingCurve& curve, int size) {
   if (size <= curve.points.front().batch_size) {
     return curve.points.front().duration;
   }
-
   if (curve.points.back().batch_size <= size) {
     return curve.points.back().duration;
   }
-  
-  for (std::size_t i = 0; i + 1 < curve.points.size(); ++i) {
-    const TimingPoint& left = curve.points[i];
-    const TimingPoint& right = curve.points[i + 1];
 
-    if (left.batch_size <= size && size <= right.batch_size) {
-      return left.duration 
-        + (size - left.batch_size)
-        * (right.duration - left.duration) 
-        / (right.batch_size - left.batch_size);
-    }
+  const auto right = std::lower_bound(
+    curve.points.begin(), curve.points.end(), size, [](const TimingPoint& point, int target) {
+      return point.batch_size < target;
+    });
+  assert(right != curve.points.begin());
+  assert(right != curve.points.end());
+  if (right->batch_size == size) {
+    return right->duration;
   }
 
-  assert(false);
-  return 0.0;
+  const TimingPoint& left = *std::prev(right);
+  return left.duration
+    + (size - left.batch_size) * (right->duration - left.duration)
+    / (right->batch_size - left.batch_size);
 }
 
 namespace {

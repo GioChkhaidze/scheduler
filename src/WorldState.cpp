@@ -100,6 +100,8 @@ void applyTaskDone(WorldState& world, const TaskDoneEvent& event, int num_layers
       Request& request = getRequest(world, task.rid);
       assert(request.state == RequestState::WaitingPrefillPostDone);
       assertRequestRemote(request, task.remote);
+      world.observed_tdr_sum += world.current_time - request.arrival_time;
+      ++world.observed_tdr_count;
       request.state = RequestState::ReadyDecodePre;
     },
     [&](const DecodePreTask& task) {
@@ -131,6 +133,10 @@ void applyTaskDone(WorldState& world, const TaskDoneEvent& event, int num_layers
       for (const int rid : task.rids) {
         Request& request = getRequest(world, rid);
         assert(request.state == RequestState::WaitingDecodePostDone);
+        if (request.last_token_time.has_value()) {
+          world.observed_tpot_sum += world.current_time - *request.last_token_time;
+          ++world.observed_tpot_count;
+        }
         ++request.tokens_produced;
         request.last_token_time = world.current_time;
         request.state = RequestState::ReadyDecodePre;

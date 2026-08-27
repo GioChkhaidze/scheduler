@@ -11,7 +11,8 @@ Request makeRequest(
   int remote,
   RequestState state,
   int next_prefill_layer = 0,
-  int tokens_produced = 0
+  int tokens_produced = 0,
+  std::optional<double> last_token_time = std::nullopt
 ) {
   return {
     .input_length = 128,
@@ -19,6 +20,7 @@ Request makeRequest(
     .remote = std::optional<int>{remote},
     .next_prefill_layer = next_prefill_layer,
     .tokens_produced = tokens_produced,
+    .last_token_time = last_token_time,
     .state = state,
   };
 }
@@ -171,6 +173,8 @@ void testCompleteRequestStateMachineIncludingPrefillChunking() {
   });
   assert(!world.edge.busy);
   assert(world.requests.at(0).state == RequestState::ReadyDecodePre);
+  assert(world.observed_tdr_count == 1);
+  assert(world.observed_tdr_sum == 6.0);
 
   startAssignment(
     world,
@@ -249,6 +253,7 @@ void testCompleteRequestStateMachineIncludingPrefillChunking() {
   assert(!world.edge.busy);
   assert(world.requests.at(0).tokens_produced == 1);
   assert(world.requests.at(0).state == RequestState::Finished);
+  assert(world.observed_tpot_count == 0);
 }
 
 void testDecodePreAndUploadsAcrossTwoClouds() {
@@ -366,7 +371,8 @@ void testDecodeProcDownloadsAndGroupedPost() {
     1,
     RequestState::ReadyDecodeProc,
     0,
-    3
+    3,
+    4.0
   ));
 
   startAssignment(
@@ -457,6 +463,8 @@ void testDecodeProcDownloadsAndGroupedPost() {
   assert(world.requests.at(1).tokens_produced == 4);
   assert(world.requests.at(0).last_token_time == 8.0);
   assert(world.requests.at(1).last_token_time == 8.0);
+  assert(world.observed_tpot_count == 1);
+  assert(world.observed_tpot_sum == 4.0);
 }
 
 void testFinishWinsRegardlessOfFrameLineOrder() {

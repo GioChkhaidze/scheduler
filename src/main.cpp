@@ -45,14 +45,14 @@ int main() {
   SystemConfig config = readSystemConfig(std::cin);
   TaskTimeTable table = readTaskTimeTable(std::cin);
   const TimingCurves curves = buildTimingCurves(table);
-  const ScoreAwareSchedulerConfig scheduler_config = buildScoreAwareSchedulerConfig(config, curves);
+  const AdaptiveSchedulerConfig scheduler_config = buildAdaptiveSchedulerConfig(config, curves);
   WorldState world{config.K};
   
   while (const auto frame = readFrame(std::cin)) {
     applyFrame(world, *frame, config.num_layers);
 
     const std::vector<Assignment> assignments =
-      chooseScoreAwareAssignments(world, config.num_layers, scheduler_config);
+      chooseAdaptiveAssignments(world, config.num_layers, scheduler_config);
 
     for (const Assignment& assignment : assignments) {
       startAssignment(world, assignment, config.num_layers);

@@ -63,6 +63,9 @@ public:
 
   std::vector<int> select(
     const WorldState& world, RequestState state, std::optional<int> remote) const {
+    if (state == RequestState::ReadyDecodePre && shouldWarmUpPrefills(world)) {
+      return {};
+    }
     const std::vector<int> ready = scheduler_detail::findRequests(
       world, state, remote, std::numeric_limits<std::size_t>::max());
     std::vector<Candidate> candidates;
@@ -133,7 +136,23 @@ public:
     return countActiveHotSet(world) < config_.target_hot_set_size;
   }
 
+  bool preferPrefillPreBeforeDecodePre(const WorldState& world) const {
+    return shouldWarmUpPrefills(world);
+  }
+
+  bool preferPrefillProcBeforeDecodeProc(const WorldState& world, int) const {
+    return shouldWarmUpPrefills(world);
+  }
+
 private:
+  bool shouldWarmUpPrefills(const WorldState& world) const {
+    return config_.prefill_warmup
+      && countActiveHotSet(world) == 0
+      && std::any_of(world.requests.begin(), world.requests.end(), [](const Request& request) {
+        return classifyRequest(request) == RequestClass::Prefill;
+      });
+  }
+
   const ScoreAwareSchedulerConfig& config_;
 };
 
@@ -185,6 +204,7 @@ ScoreAwareSchedulerConfig buildScoreAwareSchedulerConfig(
     .slo_tdr = system.SLO1,
     .slo_tpot = system.SLO2,
     .waiting_weight = system.w_c,
+    .prefill_warmup = false,
   };
 }
 

@@ -10,7 +10,7 @@ namespace {
 
 void printUsage(const char* program) {
   std::cerr << "Usage: " << program
-    << " [--policy singleton|batch|score] [--target-hot count] [--trace] < scenario.txt\n";
+    << " [--policy singleton|batch|score|adaptive] [--target-hot count] [--trace] < scenario.txt\n";
 }
 
 } // namespace
@@ -37,7 +37,8 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (policy_name != "singleton" && policy_name != "batch" && policy_name != "score") {
+  if (policy_name != "singleton" && policy_name != "batch"
+      && policy_name != "score" && policy_name != "adaptive") {
     printUsage(argv[0]);
     return 2;
   }
@@ -49,6 +50,7 @@ int main(int argc, char** argv) {
   const DecodeBatchPolicy batch_policy = buildDecodeBatchPolicy(curves, config.S);
   const ScoreAwareSchedulerConfig score_config =
     buildScoreAwareSchedulerConfig(config, curves, target_hot_set_size);
+  const AdaptiveSchedulerConfig adaptive_config = buildAdaptiveSchedulerConfig(config, curves);
 
   const SimulationPolicy policy = [&](const WorldState& world) {
     if (policy_name == "singleton") {
@@ -57,7 +59,10 @@ int main(int argc, char** argv) {
     if (policy_name == "batch") {
       return chooseBatchedAssignments(world, config.num_layers, batch_policy);
     }
-    return chooseScoreAwareAssignments(world, config.num_layers, score_config);
+    if (policy_name == "score") {
+      return chooseScoreAwareAssignments(world, config.num_layers, score_config);
+    }
+    return chooseAdaptiveAssignments(world, config.num_layers, adaptive_config);
   };
   const SimulationResult result = simulate(config, curves, workload, policy, {record_frames, 2'000'000});
 

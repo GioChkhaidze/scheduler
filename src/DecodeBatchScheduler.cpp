@@ -49,6 +49,14 @@ public:
     return true;
   }
 
+  bool preferPrefillPreBeforeDecodePre(const WorldState&) const {
+    return false;
+  }
+
+  bool preferPrefillProcBeforeDecodeProc(const WorldState&, int) const {
+    return false;
+  }
+
 private:
   const DecodeBatchPolicy& policy_;
 };

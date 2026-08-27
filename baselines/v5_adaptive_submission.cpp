@@ -268,10 +268,6 @@ struct ServerState  {
 
 struct WorldState {
   double current_time = 0.0;
-  double observed_tdr_sum = 0.0;
-  int observed_tdr_count = 0;
-  double observed_tpot_sum = 0.0;
-  int observed_tpot_count = 0;
 
   ServerState edge;
   std::vector<ServerState> clouds;
@@ -324,7 +320,6 @@ struct ScoreAwareSchedulerConfig {
   double slo_tdr;
   double slo_tpot;
   double waiting_weight;
-  bool prefill_warmup;
 };
 
 RequestClass classifyRequest(const Request& request);
@@ -1012,8 +1007,6 @@ void applyTaskDone(WorldState& world, const TaskDoneEvent& event, int num_layers
       Request& request = getRequest(world, task.rid);
       assert(request.state == RequestState::WaitingPrefillPostDone);
       assertRequestRemote(request, task.remote);
-      world.observed_tdr_sum += world.current_time - request.arrival_time;
-      ++world.observed_tdr_count;
       request.state = RequestState::ReadyDecodePre;
     },
     [&](const DecodePreTask& task) {
@@ -1045,10 +1038,6 @@ void applyTaskDone(WorldState& world, const TaskDoneEvent& event, int num_layers
       for (const int rid : task.rids) {
         Request& request = getRequest(world, rid);
         assert(request.state == RequestState::WaitingDecodePostDone);
-        if (request.last_token_time.has_value()) {
-          world.observed_tpot_sum += world.current_time - *request.last_token_time;
-          ++world.observed_tpot_count;
-        }
         ++request.tokens_produced;
         request.last_token_time = world.current_time;
         request.state = RequestState::ReadyDecodePre;
@@ -1406,9 +1395,6 @@ public:
 
   std::vector<int> select(
     const WorldState& world, RequestState state, std::optional<int> remote) const {
-    if (state == RequestState::ReadyDecodePre && shouldWarmUpPrefills(world)) {
-      return {};
-    }
     const std::vector<int> ready = scheduler_detail::findRequests(
       world, state, remote, std::numeric_limits<std::size_t>::max());
     std::vector<Candidate> candidates;
@@ -1479,23 +1465,15 @@ public:
     return countActiveHotSet(world) < config_.target_hot_set_size;
   }
 
-  bool preferPrefillPreBeforeDecodePre(const WorldState& world) const {
-    return shouldWarmUpPrefills(world);
+  bool preferPrefillPreBeforeDecodePre(const WorldState&) const {
+    return false;
   }
 
-  bool preferPrefillProcBeforeDecodeProc(const WorldState& world, int) const {
-    return shouldWarmUpPrefills(world);
+  bool preferPrefillProcBeforeDecodeProc(const WorldState&, int) const {
+    return false;
   }
 
 private:
-  bool shouldWarmUpPrefills(const WorldState& world) const {
-    return config_.prefill_warmup
-      && countActiveHotSet(world) == 0
-      && std::any_of(world.requests.begin(), world.requests.end(), [](const Request& request) {
-        return classifyRequest(request) == RequestClass::Prefill;
-      });
-  }
-
   const ScoreAwareSchedulerConfig& config_;
 };
 
@@ -1547,7 +1525,6 @@ ScoreAwareSchedulerConfig buildScoreAwareSchedulerConfig(
     .slo_tdr = system.SLO1,
     .slo_tpot = system.SLO2,
     .waiting_weight = system.w_c,
-    .prefill_warmup = false,
   };
 }
 
@@ -1606,15 +1583,19 @@ bool hasPendingDecodeDownload(const WorldState& world) {
   });
 }
 
-bool waitingSlosComfortablyMet(
-  const WorldState& world, const ScoreAwareSchedulerConfig& waiting_policy) {
-  if (world.observed_tdr_count == 0 || world.observed_tpot_count == 0) {
-    return false;
+void capBatchChoices(std::vector<int>& choices, int cap) {
+  assert(cap >= 1);
+  for (std::size_t ready_count = 1; ready_count < choices.size(); ++ready_count) {
+    choices[ready_count] = std::min(choices[ready_count], cap);
   }
-  const double observed_tdr = world.observed_tdr_sum / world.observed_tdr_count;
-  const double observed_tpot = world.observed_tpot_sum / world.observed_tpot_count;
-  return observed_tdr <= 0.8 * waiting_policy.slo_tdr
-    && observed_tpot <= 0.8 * waiting_policy.slo_tpot;
+}
+
+DecodeBatchPolicy capDecodeBatches(
+  DecodeBatchPolicy policy, int total_batch_size, int cloud_batch_size) {
+  capBatchChoices(policy.pre_by_ready_count, total_batch_size);
+  capBatchChoices(policy.proc_by_ready_count, cloud_batch_size);
+  capBatchChoices(policy.post_by_ready_count, total_batch_size);
+  return policy;
 }
 
 class ThroughputDecodeSelector {
@@ -1699,7 +1680,7 @@ AdaptiveScoreRegime classifyScoreRegime(const SystemConfig& system) {
   if (system.dist_base == 0.0 && system.w_c >= 0.1) {
     return AdaptiveScoreRegime::HardSlo;
   }
-  if (system.w_tp >= 0.8) {
+  if (system.w_tp >= 0.7) {
     return AdaptiveScoreRegime::Throughput;
   }
   if (system.w_c >= 0.7) {
@@ -1733,10 +1714,8 @@ AdaptiveSchedulerConfig buildAdaptiveSchedulerConfig(
   const std::optional<int> waiting_target = regime == AdaptiveScoreRegime::HardSlo
     ? std::optional<int>{system.K}
     : std::nullopt;
-  ScoreAwareSchedulerConfig waiting_policy =
+  const ScoreAwareSchedulerConfig waiting_policy =
     buildScoreAwareSchedulerConfig(system, curves, waiting_target);
-  waiting_policy.prefill_warmup =
-    regime == AdaptiveScoreRegime::HardSlo && system.w_tp <= 0.1;
   const double safety_margin = 1.05 + 0.1 * system.w_tp;
   const double throughput_target = system.tp_UB * safety_margin;
 
@@ -1768,7 +1747,8 @@ AdaptiveSchedulerConfig buildAdaptiveSchedulerConfig(
 
   return {
     .baseline_decode_batches = baseline,
-    .throughput_decode_batches = std::move(baseline),
+    .throughput_decode_batches =
+      capDecodeBatches(std::move(baseline), preferred_batch_size, cloud_batch_size),
     .waiting_policy = waiting_policy,
     .regime = regime,
     .preferred_decode_batch_size = preferred_batch_size,
@@ -1784,13 +1764,8 @@ std::vector<Assignment> chooseAdaptiveAssignments(
   if (config.regime == AdaptiveScoreRegime::Balanced) {
     return chooseBatchedAssignments(world, num_layers, config.baseline_decode_batches);
   }
-  if (config.regime == AdaptiveScoreRegime::HardSlo) {
-    return chooseScoreAwareAssignments(world, num_layers, config.waiting_policy);
-  }
-  if (config.regime == AdaptiveScoreRegime::Waiting) {
-    if (waitingSlosComfortablyMet(world, config.waiting_policy)) {
-      return chooseBatchedAssignments(world, num_layers, config.baseline_decode_batches);
-    }
+  if (config.regime == AdaptiveScoreRegime::HardSlo
+      || config.regime == AdaptiveScoreRegime::Waiting) {
     return chooseScoreAwareAssignments(world, num_layers, config.waiting_policy);
   }
   return scheduler_detail::chooseAssignments(world, num_layers, ThroughputDecodeSelector{config});

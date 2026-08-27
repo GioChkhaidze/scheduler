@@ -12,6 +12,7 @@ endfunction()
 
 # Add new production .cpp files to this list.
 add_library(scheduler_core
+  src/AdaptiveScheduler.cpp
   src/SystemConfig.cpp
   src/TaskTimeTable.cpp
   src/Protocol.cpp
@@ -70,6 +71,7 @@ endfunction()
 if(BUILD_TESTING)
   # Add each new tests/FooTest.cpp file with one line here.
   add_scheduler_test(SystemConfigTest)
+  add_scheduler_test(AdaptiveSchedulerTest)
   add_scheduler_test(TaskTimeTableTest)
   add_scheduler_test(ProtocolTest)
   add_scheduler_test(SchedulerTest)

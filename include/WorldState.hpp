@@ -50,6 +50,10 @@ struct ServerState  {
 
 struct WorldState {
   double current_time = 0.0;
+  double observed_tdr_sum = 0.0;
+  int observed_tdr_count = 0;
+  double observed_tpot_sum = 0.0;
+  int observed_tpot_count = 0;
 
   ServerState edge;
   std::vector<ServerState> clouds;

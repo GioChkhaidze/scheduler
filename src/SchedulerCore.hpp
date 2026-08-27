@@ -55,6 +55,16 @@ inline std::optional<Assignment> choosePrefillPostAssignment(const WorldState& w
   return Assignment{ServerId{ServerType::Edge, -1}, PrefillPostTask{*request.remote, *rid}};
 }
 
+inline std::optional<Assignment> choosePrefillPreAssignment(const WorldState& world) {
+  const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPre);
+  if (!rid.has_value()) {
+    return std::nullopt;
+  }
+  assert(!world.clouds.empty());
+  const int remote = *rid % static_cast<int>(world.clouds.size());
+  return Assignment{ServerId{ServerType::Edge, -1}, PrefillPreTask{remote, *rid}};
+}
+
 template <typename DecodeSelector>
 std::optional<Assignment> chooseDecodePreAssignment(
   const WorldState& world, const DecodeSelector& selector) {
@@ -81,6 +91,11 @@ std::optional<Assignment> chooseEdgeAssignment(const WorldState& world, const De
     if (const auto assignment = choosePrefillPostAssignment(world)) {
       return assignment;
     }
+    if (selector.preferPrefillPreBeforeDecodePre(world)) {
+      if (const auto assignment = choosePrefillPreAssignment(world)) {
+        return assignment;
+      }
+    }
     if (const auto assignment = chooseDecodePreAssignment(world, selector)) {
       return assignment;
     }
@@ -93,10 +108,8 @@ std::optional<Assignment> chooseEdgeAssignment(const WorldState& world, const De
     }
   }
 
-  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPre)) {
-    assert(!world.clouds.empty());
-    const int remote = *rid % static_cast<int>(world.clouds.size());
-    return Assignment{ServerId{ServerType::Edge, -1}, PrefillPreTask{remote, *rid}};
+  if (const auto assignment = choosePrefillPreAssignment(world)) {
+    return assignment;
   }
 
   return std::nullopt;
@@ -110,18 +123,31 @@ std::optional<Assignment> chooseCloudAssignment(
     return std::nullopt;
   }
 
-  if (std::vector<int> rids = chooseDecodeRids(
-        world, RequestState::ReadyDecodeProc, remote, selector); !rids.empty()) {
-    return Assignment{ServerId{ServerType::Cloud, remote}, DecodeProcTask{remote, std::move(rids)}};
-  }
-
-  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillProc, remote)) {
+  const auto choose_prefill = [&]() -> std::optional<Assignment> {
+    const auto rid = findFirstRequest(world, RequestState::ReadyPrefillProc, remote);
+    if (!rid.has_value()) {
+      return std::nullopt;
+    }
     const Request& request = world.requests.at(static_cast<std::size_t>(*rid));
     assert(request.next_prefill_layer < num_layers);
     return Assignment{
       ServerId{ServerType::Cloud, remote},
       PrefillProcTask{request.next_prefill_layer, num_layers, remote, *rid},
     };
+  };
+  if (selector.preferPrefillProcBeforeDecodeProc(world, remote)) {
+    if (const auto assignment = choose_prefill()) {
+      return assignment;
+    }
+  }
+
+  if (std::vector<int> rids = chooseDecodeRids(
+        world, RequestState::ReadyDecodeProc, remote, selector); !rids.empty()) {
+    return Assignment{ServerId{ServerType::Cloud, remote}, DecodeProcTask{remote, std::move(rids)}};
+  }
+
+  if (const auto assignment = choose_prefill()) {
+    return assignment;
   }
 
   return std::nullopt;

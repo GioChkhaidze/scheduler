@@ -16,6 +16,14 @@ public:
   bool preferPrefillPostBeforeDecodePre(const WorldState&) const {
     return true;
   }
+
+  bool preferPrefillPreBeforeDecodePre(const WorldState&) const {
+    return false;
+  }
+
+  bool preferPrefillProcBeforeDecodeProc(const WorldState&, int) const {
+    return false;
+  }
 };
 
 } // namespace

@@ -72,6 +72,7 @@ int main(int argc, char** argv) {
   const DecodeBatchPolicy batch_policy = buildDecodeBatchPolicy(curves, config.S);
   const ScoreAwareSchedulerConfig score_config =
     buildScoreAwareSchedulerConfig(config, curves, target_hot_set_size);
+  const AdaptiveSchedulerConfig adaptive_config = buildAdaptiveSchedulerConfig(config, curves);
 
   std::cout << std::fixed << std::setprecision(9);
   std::cout << "policy,completed,frames,tp,mean_tdr,mean_tpot,dist,norm_tp,norm_c,score,wall_us\n";
@@ -88,6 +89,14 @@ int main(int argc, char** argv) {
     workload,
     [&](const WorldState& world) {
       return chooseScoreAwareAssignments(world, config.num_layers, score_config);
+    });
+  runPolicy(
+    "adaptive_target_" + std::to_string(adaptive_config.target_hot_set_size),
+    config,
+    curves,
+    workload,
+    [&](const WorldState& world) {
+      return chooseAdaptiveAssignments(world, config.num_layers, adaptive_config);
     });
   return 0;
 }

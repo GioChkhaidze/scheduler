@@ -48,6 +48,7 @@ ScoreAwareSchedulerConfig makeConfig(
     .slo_tdr = slo_tdr,
     .slo_tpot = slo_tpot,
     .waiting_weight = waiting_weight,
+    .prefill_warmup = false,
   };
 }
 

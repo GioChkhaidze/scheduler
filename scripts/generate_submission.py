@@ -13,6 +13,7 @@ PARTS = (
     'include/SingletonScheduler.hpp',
     'include/DecodeBatchScheduler.hpp',
     'include/ScoreAwareScheduler.hpp',
+    'include/AdaptiveScheduler.hpp',
     'include/Scheduler.hpp',
     'src/SchedulerCore.hpp',
     'src/Protocol.cpp',
@@ -22,6 +23,7 @@ PARTS = (
     'src/SingletonScheduler.cpp',
     'src/DecodeBatchScheduler.cpp',
     'src/ScoreAwareScheduler.cpp',
+    'src/AdaptiveScheduler.cpp',
     'src/main.cpp',
 )
 
