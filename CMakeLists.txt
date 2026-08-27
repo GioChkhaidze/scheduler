@@ -31,6 +31,15 @@ add_executable(scheduler src/main.cpp)
 target_link_libraries(scheduler PRIVATE scheduler_core)
 scheduler_enable_warnings(scheduler)
 
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  add_custom_target(generate_submission
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_submission.py
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Generating submission.cpp"
+  )
+endif()
+
 include(CTest)
 
 function(add_scheduler_test test_name)

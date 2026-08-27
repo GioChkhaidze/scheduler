@@ -178,6 +178,9 @@ struct OutputVisitor : Visitors... {
   using Visitors::operator()...;
 };
 
+template <typename... Visitors>
+OutputVisitor(Visitors...) -> OutputVisitor<Visitors...>;
+
 void writeRequestIds(std::ostream& output, const std::vector<int>& rids) {
   output << rids.size();
   for (const int rid : rids) {

@@ -10,6 +10,9 @@ struct Overloaded : Visitors... {
   using Visitors::operator()...;
 };
 
+template <typename... Visitors>
+Overloaded(Visitors...) -> Overloaded<Visitors...>;
+
 Request& getRequest(WorldState& world, int rid) {
   assert(rid >= 0);
   const auto index = static_cast<std::size_t>(rid);
