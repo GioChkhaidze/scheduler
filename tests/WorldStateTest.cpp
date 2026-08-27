@@ -57,14 +57,22 @@ void testArrivalCreatesPersistentRequestState() {
   assert(second.state == RequestState::ReadyPrefillPre);
 }
 
-void testCompletePrefillTransitionChainIncludingChunking() {
+void testCompleteRequestStateMachineIncludingPrefillChunking() {
   WorldState world{1};
-  world.requests.push_back(makeRequest(
-    0,
-    RequestState::WaitingPrefillPreDone
-  ));
+  applyEvents(world, 1.0, {ArrivalEvent{0, 128}});
 
-  world.edge.busy = true;
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Edge, -1},
+      PrefillPreTask{0, 0},
+    },
+    4
+  );
+  assert(world.edge.busy);
+  assert(world.requests.at(0).remote == 0);
+  assert(world.requests.at(0).state == RequestState::WaitingPrefillPreDone);
+
   applyEvents(world, 2.0, {
     TaskDoneEvent{
       ServerId{ServerType::Edge, -1},
@@ -86,8 +94,18 @@ void testCompletePrefillTransitionChainIncludingChunking() {
   });
   assert(world.requests.at(0).state == RequestState::ReadyPrefillProc);
 
-  world.requests.at(0).state = RequestState::WaitingPrefillProcDone;
-  world.clouds.at(0).busy = true;
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Cloud, 0},
+      PrefillProcTask{0, 2, 0, 0},
+    },
+    4
+  );
+  assert(world.clouds.at(0).busy);
+  assert(world.requests.at(0).next_prefill_layer == 0);
+  assert(world.requests.at(0).state == RequestState::WaitingPrefillProcDone);
+
   applyEvents(world, 4.0, {
     TaskDoneEvent{
       ServerId{ServerType::Cloud, 0},
@@ -99,8 +117,18 @@ void testCompletePrefillTransitionChainIncludingChunking() {
   assert(world.requests.at(0).next_prefill_layer == 2);
   assert(world.requests.at(0).state == RequestState::ReadyPrefillProc);
 
-  world.requests.at(0).state = RequestState::WaitingPrefillProcDone;
-  world.clouds.at(0).busy = true;
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Cloud, 0},
+      PrefillProcTask{2, 4, 0, 0},
+    },
+    4
+  );
+  assert(world.clouds.at(0).busy);
+  assert(world.requests.at(0).next_prefill_layer == 2);
+  assert(world.requests.at(0).state == RequestState::WaitingPrefillProcDone);
+
   applyEvents(world, 5.0, {
     TaskDoneEvent{
       ServerId{ServerType::Cloud, 0},
@@ -123,8 +151,17 @@ void testCompletePrefillTransitionChainIncludingChunking() {
   });
   assert(world.requests.at(0).state == RequestState::ReadyPrefillPost);
 
-  world.requests.at(0).state = RequestState::WaitingPrefillPostDone;
-  world.edge.busy = true;
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Edge, -1},
+      PrefillPostTask{0, 0},
+    },
+    4
+  );
+  assert(world.edge.busy);
+  assert(world.requests.at(0).state == RequestState::WaitingPrefillPostDone);
+
   applyEvents(world, 7.0, {
     TaskDoneEvent{
       ServerId{ServerType::Edge, -1},
@@ -134,22 +171,111 @@ void testCompletePrefillTransitionChainIncludingChunking() {
   });
   assert(!world.edge.busy);
   assert(world.requests.at(0).state == RequestState::ReadyDecodePre);
+
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Edge, -1},
+      DecodePreTask{{0}},
+    },
+    4
+  );
+  applyEvents(world, 8.0, {
+    TaskDoneEvent{
+      ServerId{ServerType::Edge, -1},
+      DecodePreTask{{0}},
+      1.0,
+    },
+  });
+  assert(!world.edge.busy);
+  assert(world.requests.at(0).state == RequestState::WaitingDecodeUpload);
+
+  applyEvents(world, 9.0, {
+    TransferDoneEvent{
+      TransferDirection::Up,
+      0,
+      128,
+      TransferStage::Decode,
+      {0},
+    },
+  });
+  assert(world.requests.at(0).state == RequestState::ReadyDecodeProc);
+
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Cloud, 0},
+      DecodeProcTask{0, {0}},
+    },
+    4
+  );
+  applyEvents(world, 10.0, {
+    TaskDoneEvent{
+      ServerId{ServerType::Cloud, 0},
+      DecodeProcTask{0, {0}},
+      4.0,
+    },
+  });
+  assert(!world.clouds.at(0).busy);
+  assert(world.requests.at(0).state == RequestState::WaitingDecodeDownload);
+
+  applyEvents(world, 11.0, {
+    TransferDoneEvent{
+      TransferDirection::Down,
+      0,
+      128,
+      TransferStage::Decode,
+      {0},
+    },
+  });
+  assert(world.requests.at(0).state == RequestState::ReadyDecodePost);
+
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Edge, -1},
+      DecodePostTask{{0}},
+    },
+    4
+  );
+  applyEvents(world, 12.0, {
+    TaskDoneEvent{
+      ServerId{ServerType::Edge, -1},
+      DecodePostTask{{0}},
+      1.0,
+    },
+    FinishEvent{0},
+  });
+  assert(!world.edge.busy);
+  assert(world.requests.at(0).tokens_produced == 1);
+  assert(world.requests.at(0).state == RequestState::Finished);
 }
 
 void testDecodePreAndUploadsAcrossTwoClouds() {
   WorldState world{2};
   world.requests.push_back(makeRequest(
     0,
-    RequestState::WaitingDecodePreDone
+    RequestState::ReadyDecodePre
   ));
   world.requests.push_back(makeRequest(
     1,
-    RequestState::WaitingDecodePreDone,
+    RequestState::ReadyDecodePre,
     0,
     3
   ));
 
-  world.edge.busy = true;
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Edge, -1},
+      DecodePreTask{{0, 1}},
+    },
+    4
+  );
+  assert(world.edge.busy);
+  assert(world.requests.at(0).state == RequestState::WaitingDecodePreDone);
+  assert(world.requests.at(1).state == RequestState::WaitingDecodePreDone);
+
   applyEvents(world, 2.0, {
     TaskDoneEvent{
       ServerId{ServerType::Edge, -1},
@@ -234,16 +360,35 @@ void testDecodeProcDownloadsAndGroupedPost() {
   WorldState world{2};
   world.requests.push_back(makeRequest(
     0,
-    RequestState::WaitingDecodeProcDone
+    RequestState::ReadyDecodeProc
   ));
   world.requests.push_back(makeRequest(
     1,
-    RequestState::WaitingDecodeProcDone,
+    RequestState::ReadyDecodeProc,
     0,
     3
   ));
-  world.clouds.at(0).busy = true;
-  world.clouds.at(1).busy = true;
+
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Cloud, 1},
+      DecodeProcTask{1, {1}},
+    },
+    4
+  );
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Cloud, 0},
+      DecodeProcTask{0, {0}},
+    },
+    4
+  );
+  assert(world.clouds.at(0).busy);
+  assert(world.clouds.at(1).busy);
+  assert(world.requests.at(0).state == RequestState::WaitingDecodeProcDone);
+  assert(world.requests.at(1).state == RequestState::WaitingDecodeProcDone);
 
   applyEvents(world, 5.0, {
     TaskDoneEvent{
@@ -286,9 +431,18 @@ void testDecodeProcDownloadsAndGroupedPost() {
   assert(world.requests.at(0).state == RequestState::ReadyDecodePost);
   assert(world.requests.at(1).state == RequestState::ReadyDecodePost);
 
-  world.requests.at(0).state = RequestState::WaitingDecodePostDone;
-  world.requests.at(1).state = RequestState::WaitingDecodePostDone;
-  world.edge.busy = true;
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Edge, -1},
+      DecodePostTask{{0, 1}},
+    },
+    4
+  );
+  assert(world.edge.busy);
+  assert(world.requests.at(0).state == RequestState::WaitingDecodePostDone);
+  assert(world.requests.at(1).state == RequestState::WaitingDecodePostDone);
+
   applyEvents(world, 8.0, {
     TaskDoneEvent{
       ServerId{ServerType::Edge, -1},
@@ -307,17 +461,28 @@ void testFinishWinsRegardlessOfFrameLineOrder() {
   WorldState world{1};
   world.requests.push_back(makeRequest(
     0,
-    RequestState::WaitingDecodePostDone,
+    RequestState::ReadyDecodePost,
     0,
     2
   ));
   world.requests.push_back(makeRequest(
     0,
-    RequestState::WaitingDecodePostDone,
+    RequestState::ReadyDecodePost,
     0,
     7
   ));
-  world.edge.busy = true;
+
+  startAssignment(
+    world,
+    Assignment{
+      ServerId{ServerType::Edge, -1},
+      DecodePostTask{{0, 1}},
+    },
+    4
+  );
+  assert(world.edge.busy);
+  assert(world.requests.at(0).state == RequestState::WaitingDecodePostDone);
+  assert(world.requests.at(1).state == RequestState::WaitingDecodePostDone);
 
   applyEvents(world, 9.0, {
     FinishEvent{0},
@@ -339,7 +504,7 @@ void testFinishWinsRegardlessOfFrameLineOrder() {
 
 int main() {
   testArrivalCreatesPersistentRequestState();
-  testCompletePrefillTransitionChainIncludingChunking();
+  testCompleteRequestStateMachineIncludingPrefillChunking();
   testDecodePreAndUploadsAcrossTwoClouds();
   testDecodeTransferUpdatesEveryCarriedRequestOnly();
   testDecodeProcDownloadsAndGroupedPost();

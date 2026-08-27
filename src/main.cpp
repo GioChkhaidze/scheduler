@@ -54,26 +54,12 @@ Connect everything into the interactive read-update-decide-print-flush loop.
 Replay the worked examples and test simultaneous events and degenerate cases.
 */
 
-  // while (readFrame(std::cin)) {
-  //   if (frame.end) break;
-
-  //   applyEvents(frame);
-
-  //   std::vector<Assignment> actions = scheduler.decide();
-  //   print(actions);
-  //   flush();
-  // }
-
-  // while (true) {
-  //   Frame frame = readFrame();
-  //   if (frame.end) break;
-
-  //   applyEvents(frame);
-
-  //   std::vector<Assignment> actions = scheduler.decide();
-  //   print(actions);
-  //   flush();
-  // }
+// while (const auto frame = readFrame(std::cin)) {
+//   applyFrame(world, *frame, config.num_layers);
+//   auto assignments = scheduler.decide(world);
+//   writeAssignments(std::cout, assignments);
+//   std::cout << std::flush;
+// }
 
   return 0;
 }

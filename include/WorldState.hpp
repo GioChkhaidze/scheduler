@@ -58,4 +58,10 @@ struct WorldState {
     : clouds(static_cast<std::size_t>(cloud_count)) {}
 };
 
+struct Assignment {
+  ServerId server;
+  TaskSpec task;
+};
+
 void applyFrame(WorldState& world, const Frame& frame, int num_layers);
+void startAssignment(WorldState& world, const Assignment& assignment, int num_layers);

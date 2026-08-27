@@ -204,3 +204,94 @@ void applyFrame(WorldState& world, const Frame& frame, int num_layers) {
     }
   }
 }
+
+void startAssignment(WorldState& world, const Assignment& assignment, int num_layers) {
+  assert(num_layers > 0);
+  assert(num_layers > 0);
+
+  ServerState& server = getServer(world, assignment.server);
+  assert(!server.busy);
+
+  std::visit(Overloaded{
+    [&](const PrefillPreTask& task) {
+      assertEdgeServer(assignment.server);
+
+      Request& request = getRequest(world, task.rid);
+      assert(request.state == RequestState::ReadyPrefillPre);
+      assert(!request.remote.has_value());
+
+      assert(task.remote >= 0);
+      assert(static_cast<std::size_t>(task.remote) < world.clouds.size());
+
+      request.remote = task.remote;
+      request.state = RequestState::WaitingPrefillPreDone;
+    },
+    [&](const PrefillProcTask& task) {
+      assertCloudServer(assignment.server, task.remote);
+
+      Request& request = getRequest(world, task.rid);
+      assert(request.state == RequestState::ReadyPrefillProc);
+      assertRequestRemote(request, task.remote);
+
+      assert(task.layer_begin == request.next_prefill_layer);
+      assert(task.layer_begin >= 0);
+      assert(task.layer_begin < task.layer_end);
+      assert(task.layer_end <= num_layers);
+
+      request.state = RequestState::WaitingPrefillProcDone;
+    },
+    [&](const PrefillPostTask& task) {
+      assertEdgeServer(assignment.server);
+
+      Request& request = getRequest(world, task.rid);
+      assert(request.state == RequestState::ReadyPrefillPost);
+      assertRequestRemote(request, task.remote);
+
+      request.state = RequestState::WaitingPrefillPostDone;
+    },
+    [&](const DecodePreTask& task) {
+      assertEdgeServer(assignment.server);
+      assert(!task.rids.empty());
+
+      for (const int rid : task.rids) {
+        const Request& request = getRequest(world, rid);
+        assert(request.state == RequestState::ReadyDecodePre);
+        assert(request.remote.has_value());
+      }
+
+      for (const int rid : task.rids) {
+        getRequest(world, rid).state = RequestState::WaitingDecodePreDone;
+      }
+    },
+    [&](const DecodeProcTask& task) {
+      assertCloudServer(assignment.server, task.remote);
+      assert(!task.rids.empty());
+
+      for (const int rid : task.rids) {
+        const Request& request = getRequest(world, rid);
+        assert(request.state == RequestState::ReadyDecodeProc);
+        assertRequestRemote(request, task.remote);
+      }
+
+      for (const int rid : task.rids) {
+        getRequest(world, rid).state = RequestState::WaitingDecodeProcDone;
+      }
+    },
+    [&](const DecodePostTask& task) {
+      assertEdgeServer(assignment.server);
+      assert(!task.rids.empty());
+
+      for (const int rid : task.rids) {
+        const Request& request = getRequest(world, rid);
+        assert(request.state == RequestState::ReadyDecodePost);
+        assert(request.remote.has_value());
+      }
+
+      for (const int rid : task.rids) {
+        getRequest(world, rid).state = RequestState::WaitingDecodePostDone;
+      }
+    },
+  }, assignment.task);
+
+  server.busy = true;
+}
