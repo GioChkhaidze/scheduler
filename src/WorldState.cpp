@@ -31,16 +31,16 @@ ServerState& getServer(WorldState& world, const ServerId& server) {
   return world.clouds.at(index);
 }
 
-void assertEdgeServer(const ServerId& server) {
+void assertEdgeServer([[maybe_unused]] const ServerId& server) {
   assert(server.type == ServerType::Edge);
 }
 
-void assertCloudServer(const ServerId& server, int remote) {
+void assertCloudServer([[maybe_unused]] const ServerId& server, [[maybe_unused]] int remote) {
   assert(server.type == ServerType::Cloud);
   assert(server.cloud_index == remote);
 }
 
-void assertRequestRemote(const Request& request, int remote) {
+void assertRequestRemote([[maybe_unused]] const Request& request, [[maybe_unused]] int remote) {
   assert(request.remote.has_value());
   assert(*request.remote == remote);
 }
@@ -49,7 +49,7 @@ void applyArrival(WorldState& world, const ArrivalEvent& arrival) {
   assert(arrival.rid >= 0);
   assert(arrival.input_length > 0);
 
-  const auto rid = static_cast<std::size_t>(arrival.rid);
+  [[maybe_unused]] const auto rid = static_cast<std::size_t>(arrival.rid);
   assert(rid == world.requests.size());
 
   world.requests.push_back({
@@ -208,8 +208,7 @@ void applyFrame(WorldState& world, const Frame& frame, int num_layers) {
   }
 }
 
-void startAssignment(WorldState& world, const Assignment& assignment, int num_layers) {
-  assert(num_layers > 0);
+void startAssignment(WorldState& world, const Assignment& assignment, [[maybe_unused]] int num_layers) {
   assert(num_layers > 0);
 
   ServerState& server = getServer(world, assignment.server);
@@ -257,7 +256,7 @@ void startAssignment(WorldState& world, const Assignment& assignment, int num_la
       assert(!task.rids.empty());
 
       for (const int rid : task.rids) {
-        const Request& request = getRequest(world, rid);
+        [[maybe_unused]] const Request& request = getRequest(world, rid);
         assert(request.state == RequestState::ReadyDecodePre);
         assert(request.remote.has_value());
       }
@@ -271,7 +270,7 @@ void startAssignment(WorldState& world, const Assignment& assignment, int num_la
       assert(!task.rids.empty());
 
       for (const int rid : task.rids) {
-        const Request& request = getRequest(world, rid);
+        [[maybe_unused]] const Request& request = getRequest(world, rid);
         assert(request.state == RequestState::ReadyDecodeProc);
         assertRequestRemote(request, task.remote);
       }
@@ -285,7 +284,7 @@ void startAssignment(WorldState& world, const Assignment& assignment, int num_la
       assert(!task.rids.empty());
 
       for (const int rid : task.rids) {
-        const Request& request = getRequest(world, rid);
+        [[maybe_unused]] const Request& request = getRequest(world, rid);
         assert(request.state == RequestState::ReadyDecodePost);
         assert(request.remote.has_value());
       }

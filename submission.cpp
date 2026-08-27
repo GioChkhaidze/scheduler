@@ -280,7 +280,13 @@ void applyFrame(WorldState& world, const Frame& frame, int num_layers);
 void startAssignment(WorldState& world, const Assignment& assignment, int num_layers);
 // ===== END include/WorldState.hpp =====
 
-// ===== BEGIN include/Scheduler.hpp =====
+// ===== BEGIN include/SingletonScheduler.hpp =====
+#include <vector>
+
+std::vector<Assignment> chooseSingletonAssignments(const WorldState& world, int num_layers);
+// ===== END include/SingletonScheduler.hpp =====
+
+// ===== BEGIN include/DecodeBatchScheduler.hpp =====
 #include <vector>
 
 struct DecodeBatchPolicy {
@@ -290,10 +296,142 @@ struct DecodeBatchPolicy {
 };
 
 DecodeBatchPolicy buildDecodeBatchPolicy(const TimingCurves& curves, double assignment_cost, int max_batch_size = 4096);
-std::vector<Assignment> chooseSingletonAssignments(const WorldState& world, int num_layers);
 std::vector<Assignment> chooseBatchedAssignments(
   const WorldState& world, int num_layers, const DecodeBatchPolicy& batch_policy);
+// ===== END include/DecodeBatchScheduler.hpp =====
+
+// ===== BEGIN include/Scheduler.hpp =====
+
 // ===== END include/Scheduler.hpp =====
+
+// ===== BEGIN src/SchedulerCore.hpp =====
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <optional>
+#include <utility>
+#include <vector>
+
+namespace scheduler_detail {
+
+inline std::optional<int> findFirstRequest(
+  const WorldState& world, RequestState state, std::optional<int> remote = std::nullopt) {
+  for (std::size_t i = 0; i < world.requests.size(); ++i) {
+    const Request& request = world.requests[i];
+    if (request.state == state && (!remote.has_value() || request.remote == remote)) {
+      return static_cast<int>(i);
+    }
+  }
+  return std::nullopt;
+}
+
+inline std::vector<int> findRequests(
+  const WorldState& world, RequestState state, std::optional<int> remote, std::size_t limit) {
+  std::vector<int> rids;
+  rids.reserve(std::min(limit, world.requests.size()));
+  for (std::size_t i = 0; i < world.requests.size() && rids.size() < limit; ++i) {
+    const Request& request = world.requests[i];
+    if (request.state == state && (!remote.has_value() || request.remote == remote)) {
+      rids.push_back(static_cast<int>(i));
+    }
+  }
+  return rids;
+}
+
+template <typename DecodeSelector>
+std::vector<int> chooseDecodeRids(
+  const WorldState& world,
+  RequestState state,
+  std::optional<int> remote,
+  const DecodeSelector& selector) {
+  std::vector<int> rids = findRequests(world, state, remote, selector.inspectionLimit());
+  if (rids.empty()) {
+    return rids;
+  }
+
+  const int batch_size = selector.batchSize(state, rids.size());
+  assert(batch_size >= 1);
+  assert(static_cast<std::size_t>(batch_size) <= rids.size());
+  rids.resize(static_cast<std::size_t>(batch_size));
+  return rids;
+}
+
+template <typename DecodeSelector>
+std::optional<Assignment> chooseEdgeAssignment(const WorldState& world, const DecodeSelector& selector) {
+  if (world.edge.busy) {
+    return std::nullopt;
+  }
+
+  if (std::vector<int> rids = chooseDecodeRids(
+        world, RequestState::ReadyDecodePost, std::nullopt, selector); !rids.empty()) {
+    return Assignment{ServerId{ServerType::Edge, -1}, DecodePostTask{std::move(rids)}};
+  }
+
+  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPost)) {
+    const Request& request = world.requests.at(static_cast<std::size_t>(*rid));
+    assert(request.remote.has_value());
+    return Assignment{ServerId{ServerType::Edge, -1}, PrefillPostTask{*request.remote, *rid}};
+  }
+
+  if (std::vector<int> rids = chooseDecodeRids(
+        world, RequestState::ReadyDecodePre, std::nullopt, selector); !rids.empty()) {
+    return Assignment{ServerId{ServerType::Edge, -1}, DecodePreTask{std::move(rids)}};
+  }
+
+  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPre)) {
+    assert(!world.clouds.empty());
+    const int remote = *rid % static_cast<int>(world.clouds.size());
+    return Assignment{ServerId{ServerType::Edge, -1}, PrefillPreTask{remote, *rid}};
+  }
+
+  return std::nullopt;
+}
+
+template <typename DecodeSelector>
+std::optional<Assignment> chooseCloudAssignment(
+  const WorldState& world, int remote, int num_layers, const DecodeSelector& selector) {
+  const ServerState& cloud = world.clouds.at(static_cast<std::size_t>(remote));
+  if (cloud.busy) {
+    return std::nullopt;
+  }
+
+  if (std::vector<int> rids = chooseDecodeRids(
+        world, RequestState::ReadyDecodeProc, remote, selector); !rids.empty()) {
+    return Assignment{ServerId{ServerType::Cloud, remote}, DecodeProcTask{remote, std::move(rids)}};
+  }
+
+  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillProc, remote)) {
+    const Request& request = world.requests.at(static_cast<std::size_t>(*rid));
+    assert(request.next_prefill_layer < num_layers);
+    return Assignment{
+      ServerId{ServerType::Cloud, remote},
+      PrefillProcTask{request.next_prefill_layer, num_layers, remote, *rid},
+    };
+  }
+
+  return std::nullopt;
+}
+
+template <typename DecodeSelector>
+std::vector<Assignment> chooseAssignments(
+  const WorldState& world, int num_layers, const DecodeSelector& selector) {
+  assert(num_layers > 0);
+
+  std::vector<Assignment> assignments;
+  assignments.reserve(world.clouds.size() + 1);
+  if (const auto edge_assignment = chooseEdgeAssignment(world, selector)) {
+    assignments.push_back(*edge_assignment);
+  }
+  for (std::size_t remote = 0; remote < world.clouds.size(); ++remote) {
+    if (const auto assignment = chooseCloudAssignment(world, static_cast<int>(remote), num_layers, selector)) {
+      assignments.push_back(*assignment);
+    }
+  }
+  return assignments;
+}
+
+} // namespace scheduler_detail
+// ===== END src/SchedulerCore.hpp =====
 
 // ===== BEGIN src/Protocol.cpp =====
 #include <iostream>
@@ -693,16 +831,16 @@ ServerState& getServer(WorldState& world, const ServerId& server) {
   return world.clouds.at(index);
 }
 
-void assertEdgeServer(const ServerId& server) {
+void assertEdgeServer([[maybe_unused]] const ServerId& server) {
   assert(server.type == ServerType::Edge);
 }
 
-void assertCloudServer(const ServerId& server, int remote) {
+void assertCloudServer([[maybe_unused]] const ServerId& server, [[maybe_unused]] int remote) {
   assert(server.type == ServerType::Cloud);
   assert(server.cloud_index == remote);
 }
 
-void assertRequestRemote(const Request& request, int remote) {
+void assertRequestRemote([[maybe_unused]] const Request& request, [[maybe_unused]] int remote) {
   assert(request.remote.has_value());
   assert(*request.remote == remote);
 }
@@ -711,7 +849,7 @@ void applyArrival(WorldState& world, const ArrivalEvent& arrival) {
   assert(arrival.rid >= 0);
   assert(arrival.input_length > 0);
 
-  const auto rid = static_cast<std::size_t>(arrival.rid);
+  [[maybe_unused]] const auto rid = static_cast<std::size_t>(arrival.rid);
   assert(rid == world.requests.size());
 
   world.requests.push_back({
@@ -870,8 +1008,7 @@ void applyFrame(WorldState& world, const Frame& frame, int num_layers) {
   }
 }
 
-void startAssignment(WorldState& world, const Assignment& assignment, int num_layers) {
-  assert(num_layers > 0);
+void startAssignment(WorldState& world, const Assignment& assignment, [[maybe_unused]] int num_layers) {
   assert(num_layers > 0);
 
   ServerState& server = getServer(world, assignment.server);
@@ -919,7 +1056,7 @@ void startAssignment(WorldState& world, const Assignment& assignment, int num_la
       assert(!task.rids.empty());
 
       for (const int rid : task.rids) {
-        const Request& request = getRequest(world, rid);
+        [[maybe_unused]] const Request& request = getRequest(world, rid);
         assert(request.state == RequestState::ReadyDecodePre);
         assert(request.remote.has_value());
       }
@@ -933,7 +1070,7 @@ void startAssignment(WorldState& world, const Assignment& assignment, int num_la
       assert(!task.rids.empty());
 
       for (const int rid : task.rids) {
-        const Request& request = getRequest(world, rid);
+        [[maybe_unused]] const Request& request = getRequest(world, rid);
         assert(request.state == RequestState::ReadyDecodeProc);
         assertRequestRemote(request, task.remote);
       }
@@ -947,7 +1084,7 @@ void startAssignment(WorldState& world, const Assignment& assignment, int num_la
       assert(!task.rids.empty());
 
       for (const int rid : task.rids) {
-        const Request& request = getRequest(world, rid);
+        [[maybe_unused]] const Request& request = getRequest(world, rid);
         assert(request.state == RequestState::ReadyDecodePost);
         assert(request.remote.has_value());
       }
@@ -962,147 +1099,37 @@ void startAssignment(WorldState& world, const Assignment& assignment, int num_la
 }
 // ===== END src/WorldState.cpp =====
 
-// ===== BEGIN src/Scheduler.cpp =====
+// ===== BEGIN src/SingletonScheduler.cpp =====
+#include <cstddef>
+
+namespace {
+
+class SingletonDecodeSelector {
+public:
+  std::size_t inspectionLimit() const {
+    return 1;
+  }
+
+  int batchSize(RequestState, std::size_t) const {
+    return 1;
+  }
+};
+
+} // namespace
+
+std::vector<Assignment> chooseSingletonAssignments(const WorldState& world, int num_layers) {
+  return scheduler_detail::chooseAssignments(world, num_layers, SingletonDecodeSelector{});
+}
+// ===== END src/SingletonScheduler.cpp =====
+
+// ===== BEGIN src/DecodeBatchScheduler.cpp =====
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <limits>
-#include <optional>
-#include <utility>
 #include <vector>
 
 namespace {
-
-std::optional<int> findFirstRequest(
-  const WorldState& world, RequestState state, std::optional<int> remote = std::nullopt) {
-  for (std::size_t i = 0; i < world.requests.size(); ++i) {
-    const Request& request = world.requests[i];
-    if (request.state != state) {
-      continue;
-    }
-    if (remote.has_value() && request.remote != remote) {
-      continue;
-    }
-
-    return static_cast<int>(i);
-  }
-
-  return std::nullopt;
-}
-
-std::vector<int> findRequests(
-  const WorldState& world, RequestState state, std::optional<int> remote, std::size_t limit) {
-  std::vector<int> rids;
-  rids.reserve(std::min(limit, world.requests.size()));
-
-  for (std::size_t i = 0; i < world.requests.size() && rids.size() < limit; ++i) {
-    const Request& request = world.requests[i];
-    if (request.state == state && (!remote.has_value() || request.remote == remote)) {
-      rids.push_back(static_cast<int>(i));
-    }
-  }
-
-  return rids;
-}
-
-int batchSizeForReadyCount(const std::vector<int>& choices, std::size_t ready_count) {
-  assert(ready_count > 0);
-  assert(choices.size() > 1);
-  const std::size_t index = std::min(ready_count, choices.size() - 1);
-  return choices[index];
-}
-
-std::vector<int> chooseDecodeRids(
-  const WorldState& world,
-  RequestState state,
-  std::optional<int> remote,
-  const std::vector<int>* batch_choices) {
-  const std::size_t limit = batch_choices == nullptr ? 1 : std::numeric_limits<std::size_t>::max();
-  std::vector<int> rids = findRequests(world, state, remote, limit);
-  if (rids.empty() || batch_choices == nullptr) {
-    return rids;
-  }
-
-  rids.resize(static_cast<std::size_t>(batchSizeForReadyCount(*batch_choices, rids.size())));
-  return rids;
-}
-
-std::optional<Assignment> chooseEdgeAssignment(const WorldState& world, const DecodeBatchPolicy* batch_policy) {
-  if (world.edge.busy) {
-    return std::nullopt;
-  }
-
-  const std::vector<int>* post_choices = batch_policy == nullptr ? nullptr : &batch_policy->post_by_ready_count;
-  if (std::vector<int> rids = chooseDecodeRids(
-        world, RequestState::ReadyDecodePost, std::nullopt, post_choices); !rids.empty()) {
-    return Assignment{ServerId{ServerType::Edge, -1}, DecodePostTask{std::move(rids)}};
-  }
-
-  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPost)) {
-    const Request& request = world.requests.at(static_cast<std::size_t>(*rid));
-    assert(request.remote.has_value());
-    return Assignment{ServerId{ServerType::Edge, -1}, PrefillPostTask{*request.remote, *rid}};
-  }
-
-  const std::vector<int>* pre_choices = batch_policy == nullptr ? nullptr : &batch_policy->pre_by_ready_count;
-  if (std::vector<int> rids = chooseDecodeRids(
-        world, RequestState::ReadyDecodePre, std::nullopt, pre_choices); !rids.empty()) {
-    return Assignment{ServerId{ServerType::Edge, -1}, DecodePreTask{std::move(rids)}};
-  }
-
-  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPre)) {
-    assert(!world.clouds.empty());
-    const int remote = *rid % static_cast<int>(world.clouds.size());
-    return Assignment{ServerId{ServerType::Edge, -1}, PrefillPreTask{remote, *rid}};
-  }
-
-  return std::nullopt;
-}
-
-std::optional<Assignment> chooseCloudAssignment(
-  const WorldState& world, int remote, int num_layers, const DecodeBatchPolicy* batch_policy) {
-  const ServerState& cloud = world.clouds.at(static_cast<std::size_t>(remote));
-  if (cloud.busy) {
-    return std::nullopt;
-  }
-
-  const std::vector<int>* proc_choices = batch_policy == nullptr ? nullptr : &batch_policy->proc_by_ready_count;
-  if (std::vector<int> rids = chooseDecodeRids(
-        world, RequestState::ReadyDecodeProc, remote, proc_choices); !rids.empty()) {
-    return Assignment{ServerId{ServerType::Cloud, remote}, DecodeProcTask{remote, std::move(rids)}};
-  }
-
-  if (const auto rid = findFirstRequest(world, RequestState::ReadyPrefillProc, remote)) {
-    const Request& request = world.requests.at(static_cast<std::size_t>(*rid));
-    assert(request.next_prefill_layer < num_layers);
-    return Assignment{
-      ServerId{ServerType::Cloud, remote},
-      PrefillProcTask{request.next_prefill_layer, num_layers, remote, *rid},
-    };
-  }
-
-  return std::nullopt;
-}
-
-std::vector<Assignment> chooseAssignments(
-  const WorldState& world, int num_layers, const DecodeBatchPolicy* batch_policy) {
-  assert(num_layers > 0);
-
-  std::vector<Assignment> assignments;
-  assignments.reserve(world.clouds.size() + 1);
-
-  if (const auto edge_assignment = chooseEdgeAssignment(world, batch_policy)) {
-    assignments.push_back(*edge_assignment);
-  }
-
-  for (std::size_t i = 0; i < world.clouds.size(); ++i) {
-    if (const auto cloud_assignment = chooseCloudAssignment(world, static_cast<int>(i), num_layers, batch_policy)) {
-      assignments.push_back(*cloud_assignment);
-    }
-  }
-
-  return assignments;
-}
 
 std::vector<int> buildBatchChoices(const TimingCurve& curve, double assignment_cost, int max_batch_size) {
   assert(assignment_cost >= 0.0);
@@ -1121,9 +1148,37 @@ std::vector<int> buildBatchChoices(const TimingCurve& curve, double assignment_c
     }
     choices[static_cast<std::size_t>(batch_size)] = best_batch_size;
   }
-
   return choices;
 }
+
+class BatchedDecodeSelector {
+public:
+  explicit BatchedDecodeSelector(const DecodeBatchPolicy& policy)
+    : policy_(policy) {}
+
+  std::size_t inspectionLimit() const {
+    return std::numeric_limits<std::size_t>::max();
+  }
+
+  int batchSize(RequestState state, std::size_t ready_count) const {
+    const std::vector<int>* choices = nullptr;
+    if (state == RequestState::ReadyDecodePre) {
+      choices = &policy_.pre_by_ready_count;
+    } else if (state == RequestState::ReadyDecodeProc) {
+      choices = &policy_.proc_by_ready_count;
+    } else {
+      assert(state == RequestState::ReadyDecodePost);
+      choices = &policy_.post_by_ready_count;
+    }
+
+    assert(choices->size() > 1);
+    const std::size_t index = std::min(ready_count, choices->size() - 1);
+    return choices->at(index);
+  }
+
+private:
+  const DecodeBatchPolicy& policy_;
+};
 
 } // namespace
 
@@ -1135,15 +1190,11 @@ DecodeBatchPolicy buildDecodeBatchPolicy(const TimingCurves& curves, double assi
   };
 }
 
-std::vector<Assignment> chooseSingletonAssignments(const WorldState& world, int num_layers) {
-  return chooseAssignments(world, num_layers, nullptr);
-}
-
 std::vector<Assignment> chooseBatchedAssignments(
   const WorldState& world, int num_layers, const DecodeBatchPolicy& batch_policy) {
-  return chooseAssignments(world, num_layers, &batch_policy);
+  return scheduler_detail::chooseAssignments(world, num_layers, BatchedDecodeSelector{batch_policy});
 }
-// ===== END src/Scheduler.cpp =====
+// ===== END src/DecodeBatchScheduler.cpp =====
 
 // ===== BEGIN src/main.cpp =====
 // C++20

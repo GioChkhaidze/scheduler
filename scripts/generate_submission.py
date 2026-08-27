@@ -10,16 +10,20 @@ PARTS = (
     'include/SystemConfig.hpp',
     'include/TaskTimeTable.hpp',
     'include/WorldState.hpp',
+    'include/SingletonScheduler.hpp',
+    'include/DecodeBatchScheduler.hpp',
     'include/Scheduler.hpp',
+    'src/SchedulerCore.hpp',
     'src/Protocol.cpp',
     'src/SystemConfig.cpp',
     'src/TaskTimeTable.cpp',
     'src/WorldState.cpp',
-    'src/Scheduler.cpp',
+    'src/SingletonScheduler.cpp',
+    'src/DecodeBatchScheduler.cpp',
     'src/main.cpp',
 )
 
-LOCAL_HEADERS = {Path(part).name for part in PARTS if part.startswith('include/')}
+LOCAL_HEADERS = {Path(part).name for part in PARTS if part.endswith('.hpp')}
 INCLUDE_PATTERN = re.compile(r'^\s*#include\s*[<\x22]([^>\x22]+)[>\x22]\s*$')
 
 

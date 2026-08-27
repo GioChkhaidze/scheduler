@@ -15,7 +15,9 @@ add_library(scheduler_core
   src/SystemConfig.cpp
   src/TaskTimeTable.cpp
   src/Protocol.cpp
-  src/Scheduler.cpp
+  src/DecodeBatchScheduler.cpp
+  src/Simulator.cpp
+  src/SingletonScheduler.cpp
   src/WorldState.cpp
 )
 
@@ -30,6 +32,14 @@ scheduler_enable_warnings(scheduler_core)
 add_executable(scheduler src/main.cpp)
 target_link_libraries(scheduler PRIVATE scheduler_core)
 scheduler_enable_warnings(scheduler)
+
+add_executable(scheduler_simulator src/simulator_main.cpp)
+target_link_libraries(scheduler_simulator PRIVATE scheduler_core)
+scheduler_enable_warnings(scheduler_simulator)
+
+add_executable(scheduler_benchmark src/benchmark_main.cpp)
+target_link_libraries(scheduler_benchmark PRIVATE scheduler_core)
+scheduler_enable_warnings(scheduler_benchmark)
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
@@ -62,5 +72,6 @@ if(BUILD_TESTING)
   add_scheduler_test(TaskTimeTableTest)
   add_scheduler_test(ProtocolTest)
   add_scheduler_test(SchedulerTest)
+  add_scheduler_test(SimulatorTest)
   add_scheduler_test(WorldStateTest)
 endif()
