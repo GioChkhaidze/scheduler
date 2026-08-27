@@ -55,13 +55,17 @@ inline std::optional<Assignment> choosePrefillPostAssignment(const WorldState& w
   return Assignment{ServerId{ServerType::Edge, -1}, PrefillPostTask{*request.remote, *rid}};
 }
 
-inline std::optional<Assignment> choosePrefillPreAssignment(const WorldState& world) {
+template <typename RemoteSelector>
+std::optional<Assignment> choosePrefillPreAssignment(
+  const WorldState& world, const RemoteSelector& remote_selector) {
   const auto rid = findFirstRequest(world, RequestState::ReadyPrefillPre);
   if (!rid.has_value()) {
     return std::nullopt;
   }
   assert(!world.clouds.empty());
-  const int remote = *rid % static_cast<int>(world.clouds.size());
+  const int remote = remote_selector(world, *rid);
+  assert(remote >= 0);
+  assert(static_cast<std::size_t>(remote) < world.clouds.size());
   return Assignment{ServerId{ServerType::Edge, -1}, PrefillPreTask{remote, *rid}};
 }
 
@@ -76,8 +80,9 @@ std::optional<Assignment> chooseDecodePreAssignment(
   return Assignment{ServerId{ServerType::Edge, -1}, DecodePreTask{std::move(rids)}};
 }
 
-template <typename DecodeSelector>
-std::optional<Assignment> chooseEdgeAssignment(const WorldState& world, const DecodeSelector& selector) {
+template <typename DecodeSelector, typename RemoteSelector>
+std::optional<Assignment> chooseEdgeAssignment(
+  const WorldState& world, const DecodeSelector& selector, const RemoteSelector& remote_selector) {
   if (world.edge.busy) {
     return std::nullopt;
   }
@@ -92,7 +97,7 @@ std::optional<Assignment> chooseEdgeAssignment(const WorldState& world, const De
       return assignment;
     }
     if (selector.preferPrefillPreBeforeDecodePre(world)) {
-      if (const auto assignment = choosePrefillPreAssignment(world)) {
+      if (const auto assignment = choosePrefillPreAssignment(world, remote_selector)) {
         return assignment;
       }
     }
@@ -108,7 +113,7 @@ std::optional<Assignment> chooseEdgeAssignment(const WorldState& world, const De
     }
   }
 
-  if (const auto assignment = choosePrefillPreAssignment(world)) {
+  if (const auto assignment = choosePrefillPreAssignment(world, remote_selector)) {
     return assignment;
   }
 
@@ -153,14 +158,17 @@ std::optional<Assignment> chooseCloudAssignment(
   return std::nullopt;
 }
 
-template <typename DecodeSelector>
+template <typename DecodeSelector, typename RemoteSelector>
 std::vector<Assignment> chooseAssignments(
-  const WorldState& world, int num_layers, const DecodeSelector& selector) {
+  const WorldState& world,
+  int num_layers,
+  const DecodeSelector& selector,
+  const RemoteSelector& remote_selector) {
   assert(num_layers > 0);
 
   std::vector<Assignment> assignments;
   assignments.reserve(world.clouds.size() + 1);
-  if (const auto edge_assignment = chooseEdgeAssignment(world, selector)) {
+  if (const auto edge_assignment = chooseEdgeAssignment(world, selector, remote_selector)) {
     assignments.push_back(*edge_assignment);
   }
   for (std::size_t remote = 0; remote < world.clouds.size(); ++remote) {
@@ -169,6 +177,19 @@ std::vector<Assignment> chooseAssignments(
     }
   }
   return assignments;
+}
+
+struct RoundRobinRemoteSelector {
+  int operator()(const WorldState& world, int rid) const {
+    assert(!world.clouds.empty());
+    return rid % static_cast<int>(world.clouds.size());
+  }
+};
+
+template <typename DecodeSelector>
+std::vector<Assignment> chooseAssignments(
+  const WorldState& world, int num_layers, const DecodeSelector& selector) {
+  return chooseAssignments(world, num_layers, selector, RoundRobinRemoteSelector{});
 }
 
 } // namespace scheduler_detail

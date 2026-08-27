@@ -215,3 +215,15 @@ std::vector<Assignment> chooseScoreAwareAssignments(
   assert(config.slo_tpot > 0.0);
   return scheduler_detail::chooseAssignments(world, num_layers, ScoreAwareDecodeSelector{config});
 }
+
+std::vector<Assignment> chooseScoreAwareAssignments(
+  const WorldState& world,
+  int num_layers,
+  const ScoreAwareSchedulerConfig& config,
+  const PrefillRemoteSelector& remote_selector) {
+  assert(config.target_hot_set_size >= 1);
+  assert(config.slo_tdr > 0.0);
+  assert(config.slo_tpot > 0.0);
+  return scheduler_detail::chooseAssignments(
+    world, num_layers, ScoreAwareDecodeSelector{config}, remote_selector);
+}

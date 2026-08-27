@@ -10,10 +10,12 @@ PARTS = (
     'include/SystemConfig.hpp',
     'include/TaskTimeTable.hpp',
     'include/WorldState.hpp',
+    'include/RemotePlacement.hpp',
     'include/SingletonScheduler.hpp',
     'include/DecodeBatchScheduler.hpp',
     'include/ScoreAwareScheduler.hpp',
     'include/AdaptiveScheduler.hpp',
+    'include/MultiprocessorScheduler.hpp',
     'include/Scheduler.hpp',
     'src/SchedulerCore.hpp',
     'src/Protocol.cpp',
@@ -24,6 +26,7 @@ PARTS = (
     'src/DecodeBatchScheduler.cpp',
     'src/ScoreAwareScheduler.cpp',
     'src/AdaptiveScheduler.cpp',
+    'src/MultiprocessorScheduler.cpp',
     'src/main.cpp',
 )
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <DecodeBatchScheduler.hpp>
+#include <RemotePlacement.hpp>
 #include <ScoreAwareScheduler.hpp>
 #include <SystemConfig.hpp>
 #include <TaskTimeTable.hpp>
@@ -34,3 +35,8 @@ AdaptiveSchedulerConfig buildAdaptiveSchedulerConfig(
   const SystemConfig& system, const TimingCurves& curves);
 std::vector<Assignment> chooseAdaptiveAssignments(
   const WorldState& world, int num_layers, const AdaptiveSchedulerConfig& config);
+std::vector<Assignment> chooseAdaptiveAssignments(
+  const WorldState& world,
+  int num_layers,
+  const AdaptiveSchedulerConfig& config,
+  const PrefillRemoteSelector& remote_selector);

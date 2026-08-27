@@ -27,7 +27,8 @@ A scenario contains the normal two configuration lines and task-time table, foll
 arrival_time input_length output_length
 ```
 
-Run any policy against the exact local event model. Available policies are singleton, batch, score, and adaptive.
+Run any policy against the exact local event model. Available policies are singleton, batch, score, adaptive,
+and multiprocessor.
 The score-aware policy accepts a HOT-set override:
 
 ```powershell

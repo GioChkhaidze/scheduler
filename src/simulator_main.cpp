@@ -10,7 +10,8 @@ namespace {
 
 void printUsage(const char* program) {
   std::cerr << "Usage: " << program
-    << " [--policy singleton|batch|score|adaptive] [--target-hot count] [--trace] < scenario.txt\n";
+    << " [--policy singleton|batch|score|adaptive|multiprocessor]"
+    << " [--target-hot count] [--trace] < scenario.txt\n";
 }
 
 } // namespace
@@ -38,7 +39,7 @@ int main(int argc, char** argv) {
   }
 
   if (policy_name != "singleton" && policy_name != "batch"
-      && policy_name != "score" && policy_name != "adaptive") {
+      && policy_name != "score" && policy_name != "adaptive" && policy_name != "multiprocessor") {
     printUsage(argv[0]);
     return 2;
   }
@@ -51,6 +52,8 @@ int main(int argc, char** argv) {
   const ScoreAwareSchedulerConfig score_config =
     buildScoreAwareSchedulerConfig(config, curves, target_hot_set_size);
   const AdaptiveSchedulerConfig adaptive_config = buildAdaptiveSchedulerConfig(config, curves);
+  const MultiprocessorSchedulerConfig multiprocessor_config =
+    buildMultiprocessorSchedulerConfig(config, curves);
 
   const SimulationPolicy policy = [&](const WorldState& world) {
     if (policy_name == "singleton") {
@@ -62,7 +65,10 @@ int main(int argc, char** argv) {
     if (policy_name == "score") {
       return chooseScoreAwareAssignments(world, config.num_layers, score_config);
     }
-    return chooseAdaptiveAssignments(world, config.num_layers, adaptive_config);
+    if (policy_name == "adaptive") {
+      return chooseAdaptiveAssignments(world, config.num_layers, adaptive_config);
+    }
+    return chooseMultiprocessorAssignments(world, config.num_layers, multiprocessor_config);
   };
   const SimulationResult result = simulate(config, curves, workload, policy, {record_frames, 2'000'000});
 

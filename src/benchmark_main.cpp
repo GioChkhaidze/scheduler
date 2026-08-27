@@ -73,6 +73,8 @@ int main(int argc, char** argv) {
   const ScoreAwareSchedulerConfig score_config =
     buildScoreAwareSchedulerConfig(config, curves, target_hot_set_size);
   const AdaptiveSchedulerConfig adaptive_config = buildAdaptiveSchedulerConfig(config, curves);
+  const MultiprocessorSchedulerConfig multiprocessor_config =
+    buildMultiprocessorSchedulerConfig(config, curves);
 
   std::cout << std::fixed << std::setprecision(9);
   std::cout << "policy,completed,frames,tp,mean_tdr,mean_tpot,dist,norm_tp,norm_c,score,wall_us\n";
@@ -97,6 +99,14 @@ int main(int argc, char** argv) {
     workload,
     [&](const WorldState& world) {
       return chooseAdaptiveAssignments(world, config.num_layers, adaptive_config);
+    });
+  runPolicy(
+    "multiprocessor_target_" + std::to_string(multiprocessor_config.adaptive.target_hot_set_size),
+    config,
+    curves,
+    workload,
+    [&](const WorldState& world) {
+      return chooseMultiprocessorAssignments(world, config.num_layers, multiprocessor_config);
     });
   return 0;
 }

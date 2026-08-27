@@ -1,5 +1,6 @@
 #pragma once
 
+#include <RemotePlacement.hpp>
 #include <TaskTimeTable.hpp>
 #include <WorldState.hpp>
 
@@ -16,3 +17,8 @@ DecodeBatchPolicy buildDecodeBatchPolicy(const TimingCurves& curves, double assi
 int selectDecodeBatchSize(const DecodeBatchPolicy& policy, RequestState state, std::size_t ready_count);
 std::vector<Assignment> chooseBatchedAssignments(
   const WorldState& world, int num_layers, const DecodeBatchPolicy& batch_policy);
+std::vector<Assignment> chooseBatchedAssignments(
+  const WorldState& world,
+  int num_layers,
+  const DecodeBatchPolicy& batch_policy,
+  const PrefillRemoteSelector& remote_selector);

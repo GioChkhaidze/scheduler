@@ -1,6 +1,7 @@
 #pragma once
 
 #include <DecodeBatchScheduler.hpp>
+#include <RemotePlacement.hpp>
 #include <SystemConfig.hpp>
 #include <TaskTimeTable.hpp>
 #include <WorldState.hpp>
@@ -32,3 +33,8 @@ ScoreAwareSchedulerConfig buildScoreAwareSchedulerConfig(
   std::optional<int> target_hot_set_size = std::nullopt);
 std::vector<Assignment> chooseScoreAwareAssignments(
   const WorldState& world, int num_layers, const ScoreAwareSchedulerConfig& config);
+std::vector<Assignment> chooseScoreAwareAssignments(
+  const WorldState& world,
+  int num_layers,
+  const ScoreAwareSchedulerConfig& config,
+  const PrefillRemoteSelector& remote_selector);

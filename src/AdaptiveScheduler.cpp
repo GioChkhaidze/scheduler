@@ -132,6 +132,39 @@ private:
   const AdaptiveSchedulerConfig& config_;
 };
 
+std::vector<Assignment> chooseAdaptiveAssignmentsImpl(
+  const WorldState& world,
+  int num_layers,
+  const AdaptiveSchedulerConfig& config,
+  const PrefillRemoteSelector* remote_selector) {
+  const auto choose_batched = [&] {
+    return remote_selector == nullptr
+      ? chooseBatchedAssignments(world, num_layers, config.baseline_decode_batches)
+      : chooseBatchedAssignments(world, num_layers, config.baseline_decode_batches, *remote_selector);
+  };
+  const auto choose_score_aware = [&] {
+    return remote_selector == nullptr
+      ? chooseScoreAwareAssignments(world, num_layers, config.waiting_policy)
+      : chooseScoreAwareAssignments(world, num_layers, config.waiting_policy, *remote_selector);
+  };
+
+  if (config.regime == AdaptiveScoreRegime::Balanced) {
+    return choose_batched();
+  }
+  if (config.regime == AdaptiveScoreRegime::HardSlo) {
+    return choose_score_aware();
+  }
+  if (config.regime == AdaptiveScoreRegime::Waiting) {
+    return waitingSlosComfortablyMet(world, config.waiting_policy)
+      ? choose_batched()
+      : choose_score_aware();
+  }
+  const ThroughputDecodeSelector decode_selector{config};
+  return remote_selector == nullptr
+    ? scheduler_detail::chooseAssignments(world, num_layers, decode_selector)
+    : scheduler_detail::chooseAssignments(world, num_layers, decode_selector, *remote_selector);
+}
+
 } // namespace
 
 AdaptiveScoreRegime classifyScoreRegime(const SystemConfig& system) {
@@ -222,17 +255,13 @@ AdaptiveSchedulerConfig buildAdaptiveSchedulerConfig(
 
 std::vector<Assignment> chooseAdaptiveAssignments(
   const WorldState& world, int num_layers, const AdaptiveSchedulerConfig& config) {
-  if (config.regime == AdaptiveScoreRegime::Balanced) {
-    return chooseBatchedAssignments(world, num_layers, config.baseline_decode_batches);
-  }
-  if (config.regime == AdaptiveScoreRegime::HardSlo) {
-    return chooseScoreAwareAssignments(world, num_layers, config.waiting_policy);
-  }
-  if (config.regime == AdaptiveScoreRegime::Waiting) {
-    if (waitingSlosComfortablyMet(world, config.waiting_policy)) {
-      return chooseBatchedAssignments(world, num_layers, config.baseline_decode_batches);
-    }
-    return chooseScoreAwareAssignments(world, num_layers, config.waiting_policy);
-  }
-  return scheduler_detail::chooseAssignments(world, num_layers, ThroughputDecodeSelector{config});
+  return chooseAdaptiveAssignmentsImpl(world, num_layers, config, nullptr);
+}
+
+std::vector<Assignment> chooseAdaptiveAssignments(
+  const WorldState& world,
+  int num_layers,
+  const AdaptiveSchedulerConfig& config,
+  const PrefillRemoteSelector& remote_selector) {
+  return chooseAdaptiveAssignmentsImpl(world, num_layers, config, &remote_selector);
 }

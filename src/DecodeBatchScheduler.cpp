@@ -92,3 +92,12 @@ std::vector<Assignment> chooseBatchedAssignments(
   const WorldState& world, int num_layers, const DecodeBatchPolicy& batch_policy) {
   return scheduler_detail::chooseAssignments(world, num_layers, BatchedDecodeSelector{batch_policy});
 }
+
+std::vector<Assignment> chooseBatchedAssignments(
+  const WorldState& world,
+  int num_layers,
+  const DecodeBatchPolicy& batch_policy,
+  const PrefillRemoteSelector& remote_selector) {
+  return scheduler_detail::chooseAssignments(
+    world, num_layers, BatchedDecodeSelector{batch_policy}, remote_selector);
+}
