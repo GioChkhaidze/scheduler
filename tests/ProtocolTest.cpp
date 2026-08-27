@@ -39,6 +39,10 @@ void assertRequestIds(
   assert(actual == std::vector<int>(expected));
 }
 
+void assertText(const std::string& actual, std::initializer_list<char> expected) {
+  assert(actual == std::string(expected.begin(), expected.end()));
+}
+
 void assertServer(
   const ServerId& server,
   ServerType expected_type,
@@ -259,6 +263,59 @@ void testRejectsUnknownProtocolTokens() {
   );
 }
 
+void testWritesEmptyAssignmentResponse() {
+  std::ostringstream output;
+  writeAssignments(output, {});
+
+  assertText(output.str(), {'0', '\n'});
+}
+
+void testWritesEveryAssignmentShapeExactly() {
+  const std::vector<Assignment> assignments{
+    {
+      ServerId{ServerType::Edge, -1},
+      PrefillPreTask{2, 0},
+    },
+    {
+      ServerId{ServerType::Cloud, 2},
+      PrefillProcTask{0, 4, 2, 0},
+    },
+    {
+      ServerId{ServerType::Edge, -1},
+      PrefillPostTask{2, 0},
+    },
+    {
+      ServerId{ServerType::Edge, -1},
+      DecodePreTask{{0, 1}},
+    },
+    {
+      ServerId{ServerType::Cloud, 2},
+      DecodeProcTask{2, {0, 1}},
+    },
+    {
+      ServerId{ServerType::Edge, -1},
+      DecodePostTask{{0, 1}},
+    },
+  };
+
+  std::ostringstream output;
+  writeAssignments(output, assignments);
+
+  assertText(output.str(), {
+    '6', '\n',
+    'E', ' ', 'P', ' ', 'P', 'R', 'E', ' ', '2', ' ', '0', '\n',
+    'C', '2', ' ', 'P', ' ', 'P', 'R', 'O', 'C', ' ',
+      '0', ' ', '4', ' ', '2', ' ', '0', '\n',
+    'E', ' ', 'P', ' ', 'P', 'O', 'S', 'T', ' ', '2', ' ', '0', '\n',
+    'E', ' ', 'D', ' ', 'P', 'R', 'E', ' ', '-', '1', ' ',
+      '2', ' ', '0', ' ', '1', '\n',
+    'C', '2', ' ', 'D', ' ', 'P', 'R', 'O', 'C', ' ', '2', ' ',
+      '2', ' ', '0', ' ', '1', '\n',
+    'E', ' ', 'D', ' ', 'P', 'O', 'S', 'T', ' ', '-', '1', ' ',
+      '2', ' ', '0', ' ', '1', '\n',
+  });
+}
+
 } // namespace
 
 int main() {
@@ -268,5 +325,7 @@ int main() {
   testReadsConsecutiveFramesThenEnd();
   testEndAndEofProduceNoFrame();
   testRejectsUnknownProtocolTokens();
+  testWritesEmptyAssignmentResponse();
+  testWritesEveryAssignmentShapeExactly();
   return 0;
 }

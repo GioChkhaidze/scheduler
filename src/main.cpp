@@ -1,4 +1,5 @@
 // C++20
+#include <Scheduler.hpp>
 #include "SystemConfig.hpp"
 #include "TaskTimeTable.hpp"
 #include "WorldState.hpp"
@@ -43,23 +44,20 @@ int main() {
 
   SystemConfig config = readSystemConfig(std::cin);
   TaskTimeTable table = readTaskTimeTable(std::cin);
+  WorldState world{config.K};
   
-/*
-Build the six usable timing curves from TaskTimeTable.
-Define Frame, the four event types, servers, and all six task specifications.
-Implement and test readFrame() for ARR, TDN, XDN, FIN, END, and EOF.
-Define request lifecycle and edge/cloud busy state.
-Implement legal task-generation functions.
-Connect everything into the interactive read-update-decide-print-flush loop.
-Replay the worked examples and test simultaneous events and degenerate cases.
-*/
+  while (const auto frame = readFrame(std::cin)) {
+    applyFrame(world, *frame, config.num_layers);
 
-// while (const auto frame = readFrame(std::cin)) {
-//   applyFrame(world, *frame, config.num_layers);
-//   auto assignments = scheduler.decide(world);
-//   writeAssignments(std::cout, assignments);
-//   std::cout << std::flush;
-// }
+    const std::vector<Assignment> assignments = chooseSingletonAssignments(world, config.num_layers);
+
+    for (const Assignment& assignment : assignments) {
+      startAssignment(world, assignment, config.num_layers);
+    }
+
+    writeAssignments(std::cout, assignments);
+    std::cout << std::flush;
+  }
 
   return 0;
 }

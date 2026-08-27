@@ -162,13 +162,72 @@ std::optional<Frame> readFrame(std::istream& input) {
   input >> event_count;
   assert(event_count >= 0);
 
-  frame.events.reserve(
-    static_cast<std::size_t>(event_count)
-  );
+  frame.events.reserve(static_cast<std::size_t>(event_count));
 
   for (int i = 0; i < event_count; ++i) {
     frame.events.push_back(readEvent(input));
   }
 
   return frame;
+}
+
+namespace {
+
+template <typename... Visitors>
+struct OutputVisitor : Visitors... {
+  using Visitors::operator()...;
+};
+
+void writeRequestIds(std::ostream& output, const std::vector<int>& rids) {
+  output << rids.size();
+  for (const int rid : rids) {
+    output << ' ' << rid;
+  }
+}
+
+void writeServer(std::ostream& output, const ServerId& server) {
+  if (server.type == ServerType::Edge) {
+    output << "E";
+  } else {
+    output << "C" << server.cloud_index;
+  }
+}
+
+void writeTaskSpec(std::ostream& output, const TaskSpec& task) {
+  std::visit(OutputVisitor{
+    [&](const PrefillPreTask& value) {
+      output << "P PRE " << value.remote << ' ' << value.rid;
+    },
+    [&](const PrefillProcTask& value) {
+      output << "P PROC " << value.layer_begin << ' ' << value.layer_end << ' ' << value.remote << ' ' << value.rid;
+    },
+    [&](const PrefillPostTask& value) {
+      output << "P POST " << value.remote << ' ' << value.rid;
+    },
+    [&](const DecodePreTask& value) {
+      output << "D PRE -1 ";
+      writeRequestIds(output, value.rids);
+    },
+    [&](const DecodeProcTask& value) {
+      output << "D PROC " << value.remote << ' ';
+      writeRequestIds(output, value.rids);
+    },
+    [&](const DecodePostTask& value) {
+      output << "D POST -1 ";
+      writeRequestIds(output, value.rids);
+    },
+  }, task);
+}
+
+} // namespace
+
+void writeAssignments(std::ostream& output, const std::vector<Assignment>& assignments) {
+  output << assignments.size() << '\n';
+
+  for (const Assignment& assignment : assignments) {
+    writeServer(output, assignment.server);
+    output << ' ';
+    writeTaskSpec(output, assignment.task);
+    output << '\n';
+  }
 }

@@ -63,6 +63,11 @@ using TaskSpec = std::variant<
   DecodePostTask
 >;
 
+struct Assignment {
+  ServerId server;
+  TaskSpec task;
+};
+
 /**********************************/
 /************* EVENTS *************/
 /**********************************/
@@ -123,3 +128,4 @@ struct Frame {
 };
 
 std::optional < Frame > readFrame(std::istream& input);
+void writeAssignments(std::ostream& output, const std::vector<Assignment>& assignments);

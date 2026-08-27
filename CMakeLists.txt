@@ -15,6 +15,7 @@ add_library(scheduler_core
   src/SystemConfig.cpp
   src/TaskTimeTable.cpp
   src/Protocol.cpp
+  src/Scheduler.cpp
   src/WorldState.cpp
 )
 
@@ -51,5 +52,6 @@ if(BUILD_TESTING)
   add_scheduler_test(SystemConfigTest)
   add_scheduler_test(TaskTimeTableTest)
   add_scheduler_test(ProtocolTest)
+  add_scheduler_test(SchedulerTest)
   add_scheduler_test(WorldStateTest)
 endif()
