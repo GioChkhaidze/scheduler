@@ -1,5 +1,6 @@
 #pragma once
 #include "Protocol.hpp"
+#include <cstddef>
 #include <optional>
 #include <vector>
 
