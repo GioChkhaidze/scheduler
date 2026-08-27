@@ -24,6 +24,8 @@ void printResult(
     << metrics.norm_tp << ','
     << metrics.norm_c << ','
     << metrics.score << ','
+    << result.link_reconciliation_count << ','
+    << result.maximum_link_reconciliation_error << ','
     << wall_time.count() << '\n';
 }
 
@@ -75,9 +77,20 @@ int main(int argc, char** argv) {
   const AdaptiveSchedulerConfig adaptive_config = buildAdaptiveSchedulerConfig(config, curves);
   const MultiprocessorSchedulerConfig multiprocessor_config =
     buildMultiprocessorSchedulerConfig(config, curves);
+  const SharedLinkSchedulerConfig tracking_config =
+    buildSharedLinkSchedulerConfig(config, curves, {false, false, false});
+  const SharedLinkSchedulerConfig locality_config =
+    buildSharedLinkSchedulerConfig(config, curves, {true, false, false});
+  const SharedLinkSchedulerConfig up_config =
+    buildSharedLinkSchedulerConfig(config, curves, {false, true, false});
+  const SharedLinkSchedulerConfig down_config =
+    buildSharedLinkSchedulerConfig(config, curves, {false, false, true});
+  const SharedLinkSchedulerConfig combined_config = buildSharedLinkSchedulerConfig(config, curves);
 
   std::cout << std::fixed << std::setprecision(9);
-  std::cout << "policy,completed,frames,tp,mean_tdr,mean_tpot,dist,norm_tp,norm_c,score,wall_us\n";
+  std::cout
+    << "policy,completed,frames,tp,mean_tdr,mean_tpot,dist,norm_tp,norm_c,score,"
+    << "link_reconciliations,max_link_error,wall_us\n";
   runPolicy("singleton", config, curves, workload, [&](const WorldState& world) {
     return chooseSingletonAssignments(world, config.num_layers);
   });
@@ -108,5 +121,20 @@ int main(int argc, char** argv) {
     [&](const WorldState& world) {
       return chooseMultiprocessorAssignments(world, config.num_layers, multiprocessor_config);
     });
+  runPolicy("v7_tracking", config, curves, workload, [&](const WorldState& world) {
+    return chooseSharedLinkAssignments(world, config.num_layers, tracking_config);
+  });
+  runPolicy("v7_decode_locality", config, curves, workload, [&](const WorldState& world) {
+    return chooseSharedLinkAssignments(world, config.num_layers, locality_config);
+  });
+  runPolicy("v7_up_admission", config, curves, workload, [&](const WorldState& world) {
+    return chooseSharedLinkAssignments(world, config.num_layers, up_config);
+  });
+  runPolicy("v7_down_admission", config, curves, workload, [&](const WorldState& world) {
+    return chooseSharedLinkAssignments(world, config.num_layers, down_config);
+  });
+  runPolicy("v7_combined", config, curves, workload, [&](const WorldState& world) {
+    return chooseSharedLinkAssignments(world, config.num_layers, combined_config);
+  });
   return 0;
 }

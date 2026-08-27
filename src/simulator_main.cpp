@@ -10,8 +10,29 @@ namespace {
 
 void printUsage(const char* program) {
   std::cerr << "Usage: " << program
-    << " [--policy singleton|batch|score|adaptive|multiprocessor]"
+    << " [--policy singleton|batch|score|adaptive|multiprocessor|v7-track|v7-locality|v7-up|v7-down|v7]"
     << " [--target-hot count] [--trace] < scenario.txt\n";
+}
+
+bool isSharedLinkPolicy(const std::string& policy_name) {
+  return policy_name == "v7-track" || policy_name == "v7-locality" || policy_name == "v7-up"
+    || policy_name == "v7-down" || policy_name == "v7";
+}
+
+SharedLinkFeatures featuresForPolicy(const std::string& policy_name) {
+  if (policy_name == "v7-track") {
+    return {false, false, false};
+  }
+  if (policy_name == "v7-locality") {
+    return {true, false, false};
+  }
+  if (policy_name == "v7-up") {
+    return {false, true, false};
+  }
+  if (policy_name == "v7-down") {
+    return {false, false, true};
+  }
+  return {true, true, true};
 }
 
 } // namespace
@@ -39,7 +60,8 @@ int main(int argc, char** argv) {
   }
 
   if (policy_name != "singleton" && policy_name != "batch"
-      && policy_name != "score" && policy_name != "adaptive" && policy_name != "multiprocessor") {
+      && policy_name != "score" && policy_name != "adaptive" && policy_name != "multiprocessor"
+      && !isSharedLinkPolicy(policy_name)) {
     printUsage(argv[0]);
     return 2;
   }
@@ -54,6 +76,8 @@ int main(int argc, char** argv) {
   const AdaptiveSchedulerConfig adaptive_config = buildAdaptiveSchedulerConfig(config, curves);
   const MultiprocessorSchedulerConfig multiprocessor_config =
     buildMultiprocessorSchedulerConfig(config, curves);
+  const SharedLinkSchedulerConfig shared_link_config =
+    buildSharedLinkSchedulerConfig(config, curves, featuresForPolicy(policy_name));
 
   const SimulationPolicy policy = [&](const WorldState& world) {
     if (policy_name == "singleton") {
@@ -68,7 +92,10 @@ int main(int argc, char** argv) {
     if (policy_name == "adaptive") {
       return chooseAdaptiveAssignments(world, config.num_layers, adaptive_config);
     }
-    return chooseMultiprocessorAssignments(world, config.num_layers, multiprocessor_config);
+    if (policy_name == "multiprocessor") {
+      return chooseMultiprocessorAssignments(world, config.num_layers, multiprocessor_config);
+    }
+    return chooseSharedLinkAssignments(world, config.num_layers, shared_link_config);
   };
   const SimulationResult result = simulate(config, curves, workload, policy, {record_frames, 2'000'000});
 
@@ -83,6 +110,8 @@ int main(int argc, char** argv) {
     << "completed " << result.completed << '\n'
     << "hit_frame_limit " << result.hit_frame_limit << '\n'
     << "frames " << result.frame_count << '\n'
+    << "link_reconciliations " << result.link_reconciliation_count << '\n'
+    << "max_link_error " << result.maximum_link_reconciliation_error << '\n'
     << "tokens " << result.metrics.total_tokens << '\n'
     << "elapsed " << result.metrics.total_elapsed_time << '\n'
     << "tp " << result.metrics.tp << '\n'

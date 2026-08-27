@@ -19,6 +19,7 @@ add_library(scheduler_core
   src/Protocol.cpp
   src/DecodeBatchScheduler.cpp
   src/ScoreAwareScheduler.cpp
+  src/SharedLinkScheduler.cpp
   src/Simulator.cpp
   src/SingletonScheduler.cpp
   src/WorldState.cpp
@@ -78,6 +79,7 @@ if(BUILD_TESTING)
   add_scheduler_test(ProtocolTest)
   add_scheduler_test(SchedulerTest)
   add_scheduler_test(ScoreAwareSchedulerTest)
+  add_scheduler_test(SharedLinkSchedulerTest)
   add_scheduler_test(SimulatorTest)
   add_scheduler_test(WorldStateTest)
 endif()

@@ -37,6 +37,8 @@ struct SimulationResult {
   bool completed = false;
   bool hit_frame_limit = false;
   std::size_t frame_count = 0;
+  int link_reconciliation_count = 0;
+  double maximum_link_reconciliation_error = 0.0;
   SimulationMetrics metrics;
   std::vector<Frame> frames;
 };

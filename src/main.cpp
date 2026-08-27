@@ -1,5 +1,5 @@
 // C++20
-#include <Scheduler.hpp>
+#include <SharedLinkScheduler.hpp>
 #include "SystemConfig.hpp"
 #include "TaskTimeTable.hpp"
 #include "WorldState.hpp"
@@ -11,32 +11,30 @@
 #include <vector>
 #include <variant>
 
-// class Scheduler {
-//   SystemConfig config_;
-//   TimingCurves timing_curves_;
-//   WorldState world_;
-// };
+#ifndef SCHEDULER_V7_STAGE
+#define SCHEDULER_V7_STAGE 4
+#endif
 
-// class Scheduler {
-// public:
-//   void onFrame(const Frame& frame);
+namespace {
 
-//   std::vector<Assignment> decide(double currentTime);
+SharedLinkFeatures submissionFeatures() {
+  constexpr int stage = SCHEDULER_V7_STAGE;
+  static_assert(stage >= 0 && stage <= 4);
+  switch (stage) {
+    case 0:
+      return {false, false, false};
+    case 1:
+      return {true, false, false};
+    case 2:
+      return {false, true, false};
+    case 3:
+      return {false, false, true};
+    default:
+      return {true, true, true};
+  }
+}
 
-// private:
-//   WorldState world_;
-// }
-
-/*
-read the 2 parameter lines, then N and the N warmup rows
-loop:
-    read one line; if it is END: exit
-    parse it as timestamp t; read event count e from the next line
-    read the e event lines
-    update your state (completions, arrivals, transfers, FINs)
-    choose assignments for currently free resources (possibly none)
-    print n and the n assignment lines; flush
-*/
+} // namespace
 
 int main() {
   std::ios_base::sync_with_stdio(false);
@@ -45,16 +43,19 @@ int main() {
   SystemConfig config = readSystemConfig(std::cin);
   TaskTimeTable table = readTaskTimeTable(std::cin);
   const TimingCurves curves = buildTimingCurves(table);
-  const MultiprocessorSchedulerConfig scheduler_config = buildMultiprocessorSchedulerConfig(config, curves);
+  const SharedLinkSchedulerConfig scheduler_config =
+    buildSharedLinkSchedulerConfig(config, curves, submissionFeatures());
   WorldState world{config.K};
   
   while (const auto frame = readFrame(std::cin)) {
+    observeLinkFrame(world, *frame, config);
     applyFrame(world, *frame, config.num_layers);
 
     const std::vector<Assignment> assignments =
-      chooseMultiprocessorAssignments(world, config.num_layers, scheduler_config);
+      chooseSharedLinkAssignments(world, config.num_layers, scheduler_config);
 
     for (const Assignment& assignment : assignments) {
+      recordLinkAssignment(world, assignment, config, curves);
       startAssignment(world, assignment, config.num_layers);
     }
 

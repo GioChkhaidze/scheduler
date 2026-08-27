@@ -1,4 +1,5 @@
 #pragma once
+#include "LinkState.hpp"
 #include "Protocol.hpp"
 #include <cstddef>
 #include <optional>
@@ -58,6 +59,7 @@ struct WorldState {
   ServerState edge;
   std::vector<ServerState> clouds;
   std::vector<Request> requests;
+  SharedLinkState links;
 
   explicit WorldState(int cloud_count)
     : clouds(static_cast<std::size_t>(cloud_count)) {}

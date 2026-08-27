@@ -1,4 +1,5 @@
 #include <Simulator.hpp>
+#include <SharedLinkScheduler.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -11,14 +12,6 @@
 #include <utility>
 
 namespace {
-
-template <typename... Visitors>
-struct Overloaded : Visitors... {
-  using Visitors::operator()...;
-};
-
-template <typename... Visitors>
-Overloaded(Visitors...) -> Overloaded<Visitors...>;
 
 struct ScheduledEvent {
   double timestamp;
@@ -62,6 +55,7 @@ public:
     while (!events_.empty() && result_.frame_count < options_.max_frames) {
       Frame frame = popFrame();
       processCompletedTasks(frame);
+      observeLinkFrame(world_, frame, config_);
       applyFrame(world_, frame, config_.num_layers);
 
       ++result_.frame_count;
@@ -77,6 +71,8 @@ public:
 
     result_.hit_frame_limit = !events_.empty() && result_.frame_count >= options_.max_frames;
     result_.completed = allRequestsFinished();
+    result_.link_reconciliation_count = world_.links.reconciliation_count;
+    result_.maximum_link_reconciliation_error = world_.links.maximum_reconciliation_error;
     result_.metrics = calculateMetrics();
     return result_;
   }
@@ -117,27 +113,7 @@ private:
   }
 
   double taskDuration(const TaskSpec& task) const {
-    return std::visit(Overloaded{
-      [&](const PrefillPreTask& value) {
-        return interpolate(curves_.prefill_pre, request(value.rid).input_length);
-      },
-      [&](const PrefillProcTask& value) {
-        const double full_duration = interpolate(curves_.prefill_proc, request(value.rid).input_length);
-        return full_duration * (value.layer_end - value.layer_begin) / config_.num_layers;
-      },
-      [&](const PrefillPostTask& value) {
-        return interpolate(curves_.prefill_post, request(value.rid).input_length);
-      },
-      [&](const DecodePreTask& value) {
-        return interpolate(curves_.decode_pre, static_cast<int>(value.rids.size()));
-      },
-      [&](const DecodeProcTask& value) {
-        return interpolate(curves_.decode_proc, static_cast<int>(value.rids.size()));
-      },
-      [&](const DecodePostTask& value) {
-        return interpolate(curves_.decode_post, static_cast<int>(value.rids.size()));
-      },
-    }, task);
+    return estimateTaskDuration(world_, task, curves_, config_.num_layers);
   }
 
   const Request& request(int rid) const {
@@ -161,6 +137,7 @@ private:
       }
     }
 
+    recordLinkAssignment(world_, assignment, config_, curves_);
     startAssignment(world_, assignment, config_.num_layers);
     scheduleEvent(completion_time, TaskDoneEvent{assignment.server, assignment.task, duration});
     for (const int rid : finishing_rids) {
@@ -196,42 +173,15 @@ private:
   }
 
   void queueTriggeredTransfers(const TaskDoneEvent& event, double timestamp) {
-    std::visit(Overloaded{
-      [&](const PrefillPreTask& task) {
-        queueTransfer(
-          timestamp, TransferDirection::Up, task.remote, TransferStage::Prefill,
-          request(task.rid).input_length, {task.rid});
-      },
-      [&](const PrefillProcTask& task) {
-        if (task.layer_end == config_.num_layers) {
-          queueTransfer(
-            timestamp, TransferDirection::Down, task.remote, TransferStage::Prefill,
-            request(task.rid).input_length, {task.rid});
-        }
-      },
-      [&](const PrefillPostTask&) {},
-      [&](const DecodePreTask& task) {
-        std::vector<std::vector<int>> by_remote(static_cast<std::size_t>(config_.K));
-        for (const int rid : task.rids) {
-          const int remote = *request(rid).remote;
-          by_remote.at(static_cast<std::size_t>(remote)).push_back(rid);
-        }
-        for (int remote = 0; remote < config_.K; ++remote) {
-          std::vector<int>& rids = by_remote.at(static_cast<std::size_t>(remote));
-          if (!rids.empty()) {
-            const std::int64_t length = static_cast<std::int64_t>(rids.size());
-            queueTransfer(
-              timestamp, TransferDirection::Up, remote, TransferStage::Decode, length, std::move(rids));
-          }
-        }
-      },
-      [&](const DecodeProcTask& task) {
-        queueTransfer(
-          timestamp, TransferDirection::Down, task.remote, TransferStage::Decode,
-          static_cast<std::int64_t>(task.rids.size()), task.rids);
-      },
-      [&](const DecodePostTask&) {},
-    }, event.task);
+    for (LinkTransferSpec transfer : deriveTriggeredTransfers(world_, event.task, config_.num_layers)) {
+      queueTransfer(
+        timestamp,
+        transfer.direction,
+        transfer.remote,
+        transfer.stage,
+        transfer.length,
+        std::move(transfer.rids));
+    }
   }
 
   void queueTransfer(
