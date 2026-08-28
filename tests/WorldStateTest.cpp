@@ -1,4 +1,4 @@
-#include <WorldState.hpp>
+#include <scheduler/model/WorldState.hpp>
 
 #include <cassert>
 #include <optional>
@@ -59,7 +59,7 @@ void testArrivalCreatesPersistentRequestState() {
   assert(second.state == RequestState::ReadyPrefillPre);
 }
 
-void testCompleteRequestStateMachineIncludingPrefillChunking() {
+void testCompleteRequestStateMachineIncludingMultiPiecePrefill() {
   WorldState world{1};
   applyEvents(world, 1.0, {ArrivalEvent{0, 128}});
 
@@ -516,7 +516,7 @@ void testFinishWinsRegardlessOfFrameLineOrder() {
 
 int main() {
   testArrivalCreatesPersistentRequestState();
-  testCompleteRequestStateMachineIncludingPrefillChunking();
+  testCompleteRequestStateMachineIncludingMultiPiecePrefill();
   testDecodePreAndUploadsAcrossTwoClouds();
   testDecodeTransferUpdatesEveryCarriedRequestOnly();
   testDecodeProcDownloadsAndGroupedPost();

@@ -11,8 +11,7 @@
       "displayName": "Debug development build",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "BUILD_TESTING": "ON",
-        "CMAKE_BUILD_TYPE": "Debug"
+        "BUILD_TESTING": "ON"
       }
     }
   ],

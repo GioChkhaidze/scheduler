@@ -1,4 +1,4 @@
-#include "Protocol.hpp"
+#include <scheduler/model/Protocol.hpp>
 
 #include <cassert>
 #include <cmath>

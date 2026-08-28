@@ -1,5 +1,5 @@
-#include <Scheduler.hpp>
-#include <Simulator.hpp>
+#include <scheduler/Scheduler.hpp>
+#include <scheduler/simulation/Simulator.hpp>
 
 #include <array>
 #include <cassert>

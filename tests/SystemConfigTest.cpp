@@ -1,4 +1,4 @@
-#include "SystemConfig.hpp"
+#include <scheduler/model/SystemConfig.hpp>
 
 #include <cassert>
 #include <cmath>

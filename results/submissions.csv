@@ -1,5 +1,0 @@
-version,rank,mean,total,verdict,submission_sha256,notes
-V1-singleton,3248,546.9317376910,12032.4982292019,22/22 OK,7975026c8e84b2bdc3c2c639b15036c1892ea18838fb70ba30fa59e37dab8c7b,One request per decode task
-V2-decode-batching,,597.1702858414,13137.7462885105,22/22 OK,281e02e6db51255db8c0ada838c680629ab2c318adf6268ef0e170d12ebad429,Immediate curve-driven decode batching
-V4-score-aware,,591.0535163922,13003.1773606284,22/22 OK,1c42b060aefd236455e3d728ccb75adb33438ca4f27e1867d6f1eba2122552b6,Score-aware HOT/COLD admission; throughput regression on test 22
-V5-adaptive,,643.4148063443,14155.1257395745,22/22 OK,e81772440c54ac34cb6ea9eaac64dcaf855fdc0de22b05f30e0438f942e372dd,Adaptive regimes and throughput cohorts
