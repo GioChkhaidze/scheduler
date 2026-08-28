@@ -1,7 +1,12 @@
-# Scheduler
+# Edge–Cloud Collaborative Scheduler
 
-A C++20 interactive scheduler for the distributed inference scheduling challenge. The repository now keeps the
-best judged scheduler, the protocol/state model, the exact local simulator, and focused correctness tests.
+My C++20 scheduler implementation for the ICPC 2026 Online Challenge 1 and submission for
+[A. Edge–Cloud Collaborative Scheduling](https://codeforces.com/contest/2251/problem/A), its interactive
+optimization problem.
+
+The scheduler coordinates edge and cloud resources to process inference requests while balancing output throughput
+against request waiting time. This repository contains the modular scheduler implementation, protocol and state
+model, local simulator, correctness tests, and the final self-contained `submission.cpp`.
 
 ## Build and test
 
@@ -29,29 +34,3 @@ tests/              Interface-level correctness and integration tests
 Public headers use explicit domain-qualified includes, for example
 `#include <scheduler/model/WorldState.hpp>`. `src/scheduling/SchedulerCore.hpp` intentionally remains in `src`:
 it contains private template implementation shared only by scheduling policies and is not part of the caller-facing API.
-
-## Run the interactive scheduler
-
-```powershell
-Get-Content -Raw example.txt | ./build/Debug/scheduler.exe
-```
-
-`submission.cpp` is the final self-contained Codeforces submission.
-
-## Run the simulator
-
-A simulator scenario contains the normal system configuration and task-time table, followed by a request count and
-one `arrival_time input_length output_length` row per request.
-
-```powershell
-Get-Content -Raw tests/data/example1_scenario.txt | ./build/Debug/scheduler_simulator.exe
-Get-Content -Raw tests/data/example1_scenario.txt | ./build/Debug/scheduler_simulator.exe --trace --observe
-```
-
-The simulator reports completion, throughput, TDR, TPOT, distance, and the exact score. `--trace` prints event-frame
-summaries; `--observe` adds resource utilization, queue pressure, and decode batch distributions.
-
-## Documentation
-
-- [Problem statement](docs/statement.pdf)
-- [From problem statement to correct system](docs/problem-solving-method.md)
